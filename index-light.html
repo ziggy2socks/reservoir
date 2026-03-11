@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Studio — Particle Portfolio</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f4f2ee; overflow: hidden; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    canvas { display: block; }
+    /* ── Desktop: vertical left rail ── */
+    #ui {
+      position: fixed; top: 50%; left: 48px;
+      transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 22px;
+      z-index: 10; opacity: 0;
+      animation: fadeIn 2s ease 0.8s forwards;
+    }
+    @keyframes fadeIn { to { opacity: 1; } }
+    .project-item {
+      font-size: 10px; letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.3);
+      cursor: pointer;
+      transition: color 0.3s ease;
+      user-select: none; white-space: nowrap;
+    }
+    .project-item:hover, .project-item.active {
+      color: var(--accent, #000);
+    }
+
+    /* ── Mobile: horizontal bottom bar ── */
+    @media (max-width: 640px) {
+      #ui {
+        top: auto; left: 0; bottom: 0;
+        transform: none;
+        flex-direction: row;
+        gap: 0;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 16px 20px 24px;
+        background: linear-gradient(to top, rgba(244,242,238,0.92) 0%, transparent 100%);
+        scrollbar-width: none;
+      }
+      #ui::-webkit-scrollbar { display: none; }
+      .project-item {
+        flex-shrink: 0;
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        padding: 7px 14px;
+        border-radius: 20px;
+        margin-right: 8px;
+        border: 1px solid rgba(0,0,0,0.15);
+        background: rgba(0,0,0,0.04);
+        transition: color 0.3s, border-color 0.3s, background 0.3s;
+      }
+      .project-item.active {
+        border-color: var(--accent, #000);
+        background: rgba(0,0,0,0.06);
+      }
+    }
+    #err {
+      display: none; position: fixed; top: 20px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,0,0,0.8); color: #fff;
+      padding: 10px 20px; border-radius: 6px;
+      font-size: 12px; z-index: 999; max-width: 80vw;
+    }
+  </style>
+</head>
+<body>
+
+<div id="err"></div>
+
+<div id="ui">
+  <div class="project-item active" data-project="studio"  data-color="#a8c8ff" style="--accent:#a8c8ff">Reservoir</div>
+  <div class="project-item"        data-project="bid"     data-color="#C9A84C" style="--accent:#C9A84C">Bid Discovery</div>
+  <div class="project-item"        data-project="pulse"   data-color="#00d4ff" style="--accent:#00d4ff">NYC Permit Pulse</div>
+  <div class="project-item"        data-project="radar"   data-color="#00ff88" style="--accent:#00ff88">311 Radar</div>
+  <div class="project-item"        data-project="datamap" data-color="#ff6b35" style="--accent:#ff6b35">datamap.nyc</div>
+</div>
+
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  var el = document.getElementById('err');
+  el.style.display = 'block';
+  el.textContent = 'Error: ' + msg + ' (line ' + line + ')';
+};
+</script>
+
+<!-- Load Three.js r134 UMD bundle — stable, widely cached, no module system needed -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+<script>
+(function() {
+
+// Adaptive settings based on device
+var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
+var COUNT = isMobile ? 6000 : 20000;
+var COLOR_LERP = 0.025;
+var LERP_MORPH = 0.05;
+var LERP_IDLE  = 0.08;
+
+var COLORS = {
+  studio:  new THREE.Color(0x1a1a1a),   // near black
+  bid:     new THREE.Color(0x8B6914),   // dark gold
+  pulse:   new THREE.Color(0x007a99),   // deep cyan
+  radar:   new THREE.Color(0x1a6640),   // dark green
+  datamap: new THREE.Color(0xb84a1a),   // dark orange
+};
+
+// ── Renderer ──────────────────────────────────────────────────────────────────
+var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(isMobile ? 1.0 : Math.min(window.devicePixelRatio, 1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0xf4f2ee, 1);
+document.body.appendChild(renderer.domElement);
+
+// ── Scene / Camera ────────────────────────────────────────────────────────────
+var scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xf4f2ee, 0.008);
+
+var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 85);
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+controls.enablePan = false;
+controls.minDistance = 20;
+controls.maxDistance = 150;
+
+// ── Post Processing ───────────────────────────────────────────────────────────
+var composer = new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+// Bloom disabled for light-mode aesthetic — looks wrong on white backgrounds
+
+// ── Instanced Mesh ────────────────────────────────────────────────────────────
+var geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0]), 3));
+var mat = new THREE.PointsMaterial({ size: isMobile ? 0.8 : 0.5, vertexColors: true, sizeAttenuation: true });
+var colorArr = new Float32Array(COUNT * 3);
+var posArr   = new Float32Array(COUNT * 3);
+var colorBuf = new THREE.BufferAttribute(colorArr, 3);
+var posBuf   = new THREE.BufferAttribute(posArr, 3);
+colorBuf.setUsage(THREE.DynamicDrawUsage);
+posBuf.setUsage(THREE.DynamicDrawUsage);
+var ptGeo = new THREE.BufferGeometry();
+ptGeo.setAttribute('position', posBuf);
+ptGeo.setAttribute('color', colorBuf);
+var mesh = new THREE.Points(ptGeo, mat);
+scene.add(mesh);
+
+// ── Per-particle state ────────────────────────────────────────────────────────
+var positions    = new Array(COUNT);
+var targets      = new Array(COUNT);
+var seeds        = new Float32Array(COUNT);
+var colors       = new Array(COUNT);
+var targetColors = new Array(COUNT);
+
+for (var i = 0; i < COUNT; i++) {
+  var s = rndSphere(40);
+  positions[i]    = new THREE.Vector3(s.x, s.y, s.z);
+  targets[i]      = new THREE.Vector3(s.x, s.y, s.z);
+  seeds[i]        = Math.random() * Math.PI * 2;
+  colors[i]       = new THREE.Color(0xa8c8ff);
+  targetColors[i] = new THREE.Color(0xa8c8ff);
+}
+
+// ── Shape generators ──────────────────────────────────────────────────────────
+function rndSphere(r) {
+  var theta = Math.random() * Math.PI * 2;
+  var phi   = Math.acos(2 * Math.random() - 1);
+  var rad   = r * Math.cbrt(Math.random());
+  return {
+    x: rad * Math.sin(phi) * Math.cos(theta),
+    y: rad * Math.sin(phi) * Math.sin(theta),
+    z: rad * Math.cos(phi)
+  };
+}
+
+function genStudio() {
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) pts.push(rndSphere(40));
+  return pts;
+}
+
+function genBid() {
+  var pts = [];
+  var R = 15;
+  var circleN = Math.floor(COUNT * 0.72);
+  var handleN = COUNT - circleN;
+  for (var i = 0; i < circleN; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var r = R + (Math.random() - 0.5) * 1.2;
+    pts.push({ x: r * Math.cos(a), y: r * Math.sin(a), z: (Math.random()-0.5)*2 });
+  }
+  var startX = R * Math.cos(-Math.PI * 0.75);
+  var startY = R * Math.sin(-Math.PI * 0.75);
+  var dX = Math.cos(-Math.PI * 0.75), dY = Math.sin(-Math.PI * 0.75);
+  for (var i = 0; i < handleN; i++) {
+    var t = Math.random();
+    pts.push({
+      x: startX + dX * t * 18 + (Math.random()-0.5)*0.8,
+      y: startY + dY * t * 18 + (Math.random()-0.5)*0.8,
+      z: (Math.random()-0.5)*2
+    });
+  }
+  return pts;
+}
+
+function genPulse() {
+  var buildings = [
+    [-38,6,10],[-32,4,16],[-28,5,22],[-23,3,14],[-20,6,28],
+    [-14,4,20],[-10,5,18],[-5,3,32],[-2,4,24],[2,5,20],
+    [7,4,15],[11,6,26],[17,3,18],[20,5,22],[25,4,14],[29,6,10],[35,3,12]
+  ];
+  var weights = buildings.map(function(b){ return b[1]*b[2]; });
+  var total = weights.reduce(function(a,b){return a+b;},0);
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var r = Math.random() * total, bi = 0;
+    for (var j = 0; j < weights.length; j++) { r -= weights[j]; if (r <= 0) { bi = j; break; } }
+    var b = buildings[bi];
+    pts.push({ x: b[0] + Math.random()*b[1], y: -16 + Math.random()*b[2], z: (Math.random()-0.5)*3 });
+  }
+  return pts;
+}
+
+function genDatamap() {
+  var pts = [];
+  var R = 12, cy = 8;
+  var circleN = Math.floor(COUNT * 0.65);
+  var tailN = COUNT - circleN;
+  for (var i = 0; i < circleN; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var r = R * Math.sqrt(Math.random());
+    pts.push({ x: r*Math.cos(a), y: cy+r*Math.sin(a), z: (Math.random()-0.5)*3 });
+  }
+  for (var i = 0; i < tailN; i++) {
+    var t = Math.random();
+    var hw = (1-t)*R*0.5;
+    pts.push({ x: (Math.random()-0.5)*hw*2, y: cy - R - t*20, z: (Math.random()-0.5)*2 });
+  }
+  return pts;
+}
+
+var radarAngle = 0;
+function genRadarFrame(angle) {
+  var pts = [];
+  var radii = [5,10,15,20,25];
+  var ringN = Math.floor(COUNT * 0.6);
+  var wedgeN = COUNT - ringN;
+  for (var i = 0; i < ringN; i++) {
+    var r = radii[Math.floor(Math.random()*radii.length)];
+    var a = Math.random() * Math.PI * 2;
+    var j = (Math.random()-0.5)*0.8;
+    pts.push({ x:(r+j)*Math.cos(a), y:(r+j)*Math.sin(a), z:(Math.random()-0.5)*1.5 });
+  }
+  var span = Math.PI / 5;
+  for (var i = 0; i < wedgeN; i++) {
+    var r = Math.random() * 25;
+    var a = angle + (Math.random()-0.5)*span;
+    pts.push({ x:r*Math.cos(a), y:r*Math.sin(a), z:(Math.random()-0.5)*1.5 });
+  }
+  return pts;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+var currentProject = 'studio';
+var isRadar = false;
+
+// Per-particle lerp speeds — randomized so they arrive at different times
+var lerpSpeeds = new Float32Array(COUNT);
+function randomizeLerpSpeeds(base, spread) {
+  for (var i = 0; i < COUNT; i++) {
+    // Each particle gets its own speed: base ± spread, giving organic stagger
+    lerpSpeeds[i] = base + (Math.random() - 0.5) * spread;
+  }
+}
+randomizeLerpSpeeds(0.04, 0.05); // idle default
+
+function setTargets(pts, key) {
+  for (var i = 0; i < COUNT; i++) {
+    var p = pts[i] || {x:0,y:0,z:0};
+    targets[i].set(p.x, p.y, p.z);
+    targetColors[i].copy(COLORS[key]);
+  }
+}
+
+function activateProject(key) {
+  if (key === currentProject) return;
+  currentProject = key;
+  isRadar = (key === 'radar');
+
+  // Randomize arrival speeds — wide spread = particles drift in at their own pace
+  if (key === 'studio') {
+    randomizeLerpSpeeds(0.04, 0.03);
+  } else {
+    randomizeLerpSpeeds(0.045, 0.06); // morph: staggered arrival, airy feel
+  }
+
+  if (!isRadar) {
+    var pts;
+    switch(key) {
+      case 'studio':  pts = genStudio();  break;
+      case 'bid':     pts = genBid();     break;
+      case 'pulse':   pts = genPulse();   break;
+      case 'datamap': pts = genDatamap(); break;
+    }
+    setTargets(pts, key);
+  }
+
+  document.querySelectorAll('.project-item').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.project === key);
+  });
+}
+
+document.querySelectorAll('.project-item').forEach(function(el) {
+  if (isMobile) {
+    // Tap to activate; tap active item again to return to reservoir
+    el.addEventListener('click', function() {
+      var key = el.dataset.project;
+      if (key === currentProject && key !== 'studio') {
+        activateProject('studio');
+      } else {
+        activateProject(key);
+      }
+    });
+  } else {
+    el.addEventListener('mouseenter', function() { activateProject(el.dataset.project); });
+  }
+});
+
+// ── Animate ───────────────────────────────────────────────────────────────────
+var dummy = new THREE.Object3D();
+var clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  var time = clock.getElapsedTime();
+
+  if (isRadar) {
+    radarAngle += 0.015;
+    setTargets(genRadarFrame(radarAngle), 'radar');
+  }
+
+  for (var i = 0; i < COUNT; i++) {
+    var pos = positions[i];
+    var tgt = targets[i];
+    var seed = seeds[i];
+
+    if (currentProject === 'studio') {
+      tgt.x += (Math.sin(time * 0.3 + seed)       * 2.0 - tgt.x) * 0.006;
+      tgt.y += (Math.cos(time * 0.2 + seed * 1.3) * 2.0 - tgt.y) * 0.006;
+      tgt.z += (Math.sin(time * 0.15 + seed * 0.7)* 1.5 - tgt.z) * 0.005;
+    }
+
+    pos.lerp(tgt, lerpSpeeds[i]);
+    colors[i].lerp(targetColors[i], COLOR_LERP);
+
+    posArr[i*3]   = pos.x;
+    posArr[i*3+1] = pos.y;
+    posArr[i*3+2] = pos.z;
+    colorArr[i*3]   = colors[i].r;
+    colorArr[i*3+1] = colors[i].g;
+    colorArr[i*3+2] = colors[i].b;
+  }
+
+  posBuf.needsUpdate = true;
+  colorBuf.needsUpdate = true;
+
+  controls.update();
+  composer.render();
+  
+}
+
+// ── Resize ────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', function() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+setTargets(genStudio(), 'studio');
+animate();
+
+})();
+</script>
+</body>
+</html>

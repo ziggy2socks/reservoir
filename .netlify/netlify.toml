@@ -1,0 +1,26 @@
+plugins = []
+headers = []
+redirects = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/home/zig19/.openclaw/workspace/projects/particle-portfolio"
+publishOrigin = "default"
+base = "/home/zig19/.openclaw/workspace/projects/particle-portfolio"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]

@@ -116,21 +116,22 @@ var COLOR_LERP = 0.025;
 var BLACK = new THREE.Color(0x111111);
 
 // Per-shape config: autoRotate speed (0 = locked still)
+// lockCamera: true = snap to fixed POV and disable all orbit interaction
 var SHAPE_CONFIG = {
   studio:   { rotate: 0.6 },
   bid:      { rotate: 0.4 },
-  pulse:    { rotate: 0.0 },   // skyline looks better still, facing you
-  radar:    { rotate: 0.0 },   // radar sweeps in place
-  datamap:  { rotate: 0.5 },   // statue gets slow rotation to show all sides
-  grid:     { rotate: 0.0 },   // 2D flat grid — no spin
-  lattice:  { rotate: 0.5 },   // 3D lattice cube — spin to show depth
-  line:     { rotate: 0.0 },   // line — still
-  spiral:   { rotate: 0.3 },   // spiral — gentle
-  wave:     { rotate: 0.0 },   // wave — still, you see the undulation
+  pulse:    { rotate: 0.0 },
+  radar:    { rotate: 0.0 },
+  datamap:  { rotate: 0.5 },
+  grid:     { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },  // flat, locked, dead-on
+  lattice:  { rotate: 0.5 },
+  line:     { rotate: 0.0 },
+  spiral:   { rotate: 0.3 },
+  wave:     { rotate: 0.0 },
   ring:     { rotate: 0.4 },
   dna:      { rotate: 0.3 },
   attractor:{ rotate: 0.2 },
-  text:     { rotate: 0.0 },   // text faces you
+  text:     { rotate: 0.0 },
 };
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -417,20 +418,25 @@ function genDatamap() {
 
 // ── Experimental / playground shapes ─────────────────────────────────────────
 
-// TRUE 2D GRID — flat xy plane, z=0, wide spacing so it reads as a grid not paper
+// TRUE 2D GRID — flat xy plane, z=0, screen-filling at camera z=72
+// At z=72 with 60° FOV, visible height ≈ 2 * tan(30°) * 72 ≈ 83 units
+// We want dots to bleed slightly past screen edges
 function genGrid() {
   var pts = [];
-  var cols = Math.round(Math.sqrt(COUNT));
-  var rows = Math.ceil(COUNT / cols);
-  var spacing = 1.4; // tight-ish grid dots
-  var W = (cols - 1) * spacing;
-  var H = (rows - 1) * spacing;
+  // Figure out how many cols/rows gives us good coverage at z=72
+  // Target: ~90 units wide, ~65 units tall
+  var W = 90, H = 65;
+  var aspect = W / H;
+  var rows = Math.round(Math.sqrt(COUNT / aspect));
+  var cols = Math.round(COUNT / rows);
+  var spacingX = W / (cols - 1);
+  var spacingY = H / (rows - 1);
   for (var r = 0; r < rows; r++) {
     for (var c = 0; c < cols; c++) {
       if (pts.length >= COUNT) break;
       pts.push({
-        x: -W/2 + c * spacing,
-        y: -H/2 + r * spacing,
+        x: -W/2 + c * spacingX,
+        y: -H/2 + r * spacingY,
         z: 0  // strict coplanar
       });
     }
@@ -691,6 +697,18 @@ function applyShapeConfig(key) {
   var cfg = SHAPE_CONFIG[key] || { rotate: 0.4 };
   controls.autoRotate = (cfg.rotate > 0);
   controls.autoRotateSpeed = cfg.rotate;
+
+  if (cfg.lockCamera) {
+    // Snap camera to fixed position and lock all interaction
+    var cp = cfg.camPos || [0, 0, 85];
+    camera.position.set(cp[0], cp[1], cp[2]);
+    camera.lookAt(0, 0, 0);
+    controls.target.set(0, 0, 0);
+    controls.enabled = false;
+  } else {
+    // Restore full interaction when leaving a locked shape
+    controls.enabled = true;
+  }
 }
 
 function activateProject(key) {
