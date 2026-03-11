@@ -62,6 +62,34 @@
       font-size: 12px; z-index: 999; max-width: 80vw;
     }
 
+    /* ── Debug overlay (toggle with D key) ── */
+    #debug {
+      display: none;
+      position: fixed; inset: 0; pointer-events: none; z-index: 100;
+    }
+    #debug.on { display: block; }
+    /* crosshair */
+    #debug-h { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,100,0,0.4); }
+    #debug-v { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(255,100,0,0.4); }
+    /* swarm bounding box — sized by JS */
+    #debug-box {
+      position: absolute; border: 1px dashed rgba(255,100,0,0.7);
+      box-sizing: border-box;
+    }
+    /* info panel */
+    #debug-info {
+      position: absolute; bottom: 100px; right: 20px;
+      background: rgba(0,0,0,0.75); color: #0f0;
+      font: 11px/1.7 monospace; padding: 10px 14px;
+      border-radius: 4px; white-space: pre;
+      pointer-events: none;
+    }
+    #debug-hint {
+      position: fixed; bottom: 8px; right: 12px;
+      font: 9px/1 monospace; color: rgba(0,0,0,0.2);
+      pointer-events: none; z-index: 101;
+    }
+
     /* ── Line carousel overlay ── */
     #line-frame {
       display: none;
@@ -108,6 +136,13 @@
 
 <div id="err"></div>
 <div id="loading-hint">Loading…</div>
+<div id="debug-hint">D = debug</div>
+<div id="debug">
+  <div id="debug-h"></div>
+  <div id="debug-v"></div>
+  <div id="debug-box"></div>
+  <div id="debug-info"></div>
+</div>
 
 <!-- Line mode: two ruled lines framing a carousel -->
 <div id="line-frame">
@@ -957,6 +992,7 @@ function animate() {
   colorBuf.needsUpdate = true;
   controls.update();
   composer.render();
+  updateDebug();
 }
 
 // ── Resize ────────────────────────────────────────────────────────────────────
@@ -965,6 +1001,80 @@ window.addEventListener('resize', function() {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ── Debug overlay ─────────────────────────────────────────────────────────────
+var debugEl   = document.getElementById('debug');
+var debugBox  = document.getElementById('debug-box');
+var debugInfo = document.getElementById('debug-info');
+var debugOn   = false;
+
+// Project a 3D world point to 2D screen pixel coords
+function worldToScreen(wx, wy, wz) {
+  var v = new THREE.Vector3(wx, wy, wz);
+  v.project(camera);
+  return {
+    x: (v.x + 1) / 2 * window.innerWidth,
+    y: (1 - v.y) / 2 * window.innerHeight
+  };
+}
+
+function updateDebug() {
+  if (!debugOn) return;
+
+  var W = window.innerWidth, H = window.innerHeight;
+
+  // Project swarm bounding corners at current shape
+  // Use the particle positions to find actual screen bbox
+  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  var step = Math.max(1, Math.floor(COUNT / 500)); // sample 500 particles max
+  for (var i = 0; i < COUNT; i += step) {
+    var s = worldToScreen(positions[i].x, positions[i].y, positions[i].z);
+    if (s.x < minX) minX = s.x;
+    if (s.x > maxX) maxX = s.x;
+    if (s.y < minY) minY = s.y;
+    if (s.y > maxY) maxY = s.y;
+  }
+
+  // Draw bounding box
+  debugBox.style.left   = minX + 'px';
+  debugBox.style.top    = minY + 'px';
+  debugBox.style.width  = (maxX - minX) + 'px';
+  debugBox.style.height = (maxY - minY) + 'px';
+
+  // World units at z=0 plane visible from current camera
+  var camZ   = camera.position.z;
+  var fovRad = camera.fov * Math.PI / 180;
+  var visH   = 2 * Math.tan(fovRad / 2) * camZ;
+  var visW   = visH * camera.aspect;
+
+  // Swarm size in world units (approx from screen bbox)
+  var swarmPxW = maxX - minX, swarmPxH = maxY - minY;
+  var swarmVW  = (swarmPxW / W * 100).toFixed(1);
+  var swarmVH  = (swarmPxH / H * 100).toFixed(1);
+  var swarmWU_W = (swarmPxW / W * visW).toFixed(1);
+  var swarmWU_H = (swarmPxH / H * visH).toFixed(1);
+
+  debugInfo.textContent =
+    'shape:      ' + currentProject + '\n' +
+    'screen:     ' + W + ' × ' + H + 'px\n' +
+    'cam z:      ' + camZ.toFixed(1) + ' world units\n' +
+    'visible:    ' + visW.toFixed(1) + ' × ' + visH.toFixed(1) + ' wu\n' +
+    '─────────────────────────\n' +
+    'swarm bbox: ' + swarmPxW.toFixed(0) + ' × ' + swarmPxH.toFixed(0) + 'px\n' +
+    '            ' + swarmVW + 'vw × ' + swarmVH + 'vh\n' +
+    '            ' + swarmWU_W + ' × ' + swarmWU_H + ' wu\n' +
+    '─────────────────────────\n' +
+    'autoRotate: ' + (controls.autoRotate ? controls.autoRotateSpeed.toFixed(1) : 'off') + '\n' +
+    'orbit:      ' + (controls.enabled ? 'enabled' : 'LOCKED');
+}
+
+// Toggle with D key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'd' || e.key === 'D') {
+    debugOn = !debugOn;
+    debugEl.classList.toggle('on', debugOn);
+  }
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
