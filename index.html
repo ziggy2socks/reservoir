@@ -580,14 +580,14 @@ function genLine() {
   for (var i = 0; i < half; i++) {
     pts.push({
       x: ((i / half) - 0.5) * w,
-      y:  lineY + (Math.random()-0.5)*0.15,
+      y:  lineY,
       z: 0
     });
   }
   for (var i = 0; i < COUNT - half; i++) {
     pts.push({
       x: ((i / (COUNT - half)) - 0.5) * w,
-      y: -lineY + (Math.random()-0.5)*0.15,
+      y: -lineY,
       z: 0
     });
   }
@@ -845,10 +845,9 @@ function getParticleRadiusPx() {
 }
 
 function getSwarmBbox() {
-  // Sample particle positions → find actual screen bounding box
+  // Sample ALL particles (no skip) to catch outliers at the edges
   var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  var step = Math.max(1, Math.floor(COUNT / 500));
-  for (var i = 0; i < COUNT; i += step) {
+  for (var i = 0; i < COUNT; i++) {
     var s = worldToScreen(positions[i].x, positions[i].y, positions[i].z);
     if (s.x < minX) minX = s.x;
     if (s.x > maxX) maxX = s.x;
