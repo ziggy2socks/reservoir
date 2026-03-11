@@ -852,34 +852,41 @@ function genLED() {
 
 // ── Centered 16:9 content grid — fits comfortably within viewport, letterboxed
 function genContent16x9() {
-  if (!LED_COLS || !LED_ROWS) initLED();
-  var pts = [];
-  // Size: 80% of the smaller viewport dimension, maintaining 16:9
+  // Always derive cols/rows from COUNT at strict 16:9 ratio
+  var cols = Math.round(Math.sqrt(COUNT * (16/9)));
+  var rows = Math.round(COUNT / cols);
+  // Clamp so cols*rows doesn't overshoot
+  while (cols * rows > COUNT) rows--;
+
   var fovRad = camera.fov * Math.PI / 180;
   var visH   = 2 * Math.tan(fovRad / 2) * camera.position.z;
   var visW   = visH * camera.aspect;
-  // Fit within 85% of screen, maintain 16:9
-  var maxW = visW * 0.85;
-  var maxH = visH * 0.85;
+  var maxW   = visW * 0.85;
+  var maxH   = visH * 0.85;
   var W, H;
   if (maxW / maxH > 16/9) {
     H = maxH; W = H * (16/9);
   } else {
     W = maxW; H = W * (9/16);
   }
-  for (var r = 0; r < LED_ROWS; r++) {
-    for (var c = 0; c < LED_COLS; c++) {
-      if (pts.length >= COUNT) break;
+
+  // Store for sampler use
+  LED_COLS = cols;
+  LED_ROWS = rows;
+
+  var pts = [];
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
       pts.push({
-        x: -W/2 + c * (W / (LED_COLS - 1)),
-        y: -H/2 + r * (H / (LED_ROWS - 1)),
+        x: -W/2 + c * (W / (cols - 1)),
+        y: -H/2 + r * (H / (rows - 1)),
         z: 0
       });
     }
   }
-  while (pts.length < COUNT) {
-    pts.push(pts[pts.length % (LED_COLS * LED_ROWS)]);
-  }
+  // Fill any remaining particles by wrapping
+  var n = pts.length;
+  while (pts.length < COUNT) pts.push(pts[pts.length % n]);
   return pts;
 }
 
