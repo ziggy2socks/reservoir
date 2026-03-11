@@ -789,6 +789,40 @@ function genText() {
   return pts;
 }
 
+// ── 360° drag rotation ────────────────────────────────────────────────────────
+var sphere360Lon = 0, sphere360Lat = 0;
+var sphere360Dragging = false, sphere360LastX = 0, sphere360LastY = 0;
+
+renderer.domElement.addEventListener('mousedown', function(e) {
+  if (!isSphere360) return;
+  sphere360Dragging = true;
+  sphere360LastX = e.clientX; sphere360LastY = e.clientY;
+});
+renderer.domElement.addEventListener('mousemove', function(e) {
+  if (!isSphere360 || !sphere360Dragging) return;
+  sphere360Lon -= (e.clientX - sphere360LastX) * 0.25;
+  sphere360Lat += (e.clientY - sphere360LastY) * 0.25;
+  sphere360Lat = Math.max(-85, Math.min(85, sphere360Lat));
+  sphere360LastX = e.clientX; sphere360LastY = e.clientY;
+});
+window.addEventListener('mouseup', function() { sphere360Dragging = false; });
+
+// Touch support for 360
+renderer.domElement.addEventListener('touchstart', function(e) {
+  if (!isSphere360) return;
+  sphere360Dragging = true;
+  sphere360LastX = e.touches[0].clientX; sphere360LastY = e.touches[0].clientY;
+});
+renderer.domElement.addEventListener('touchmove', function(e) {
+  if (!isSphere360 || !sphere360Dragging) return;
+  e.preventDefault();
+  sphere360Lon -= (e.touches[0].clientX - sphere360LastX) * 0.25;
+  sphere360Lat += (e.touches[0].clientY - sphere360LastY) * 0.25;
+  sphere360Lat = Math.max(-85, Math.min(85, sphere360Lat));
+  sphere360LastX = e.touches[0].clientX; sphere360LastY = e.touches[0].clientY;
+}, { passive: false });
+window.addEventListener('touchend', function() { sphere360Dragging = false; });
+
 // ── Mouse tracking ────────────────────────────────────────────────────────────
 var mouse = new THREE.Vector3(0, 0, 0); // world-space cursor position at z=0 plane
 var mouseScreen = { x: -9999, y: -9999 };
@@ -1035,7 +1069,7 @@ var sphereColors = null;
 var spherePoints = null;
 var sphereLoaded = false;
 var isSphere360  = false;
-var SPHERE_R     = 55; // radius of the particle sphere
+var SPHERE_R     = 28; // radius of the particle sphere — tighter, denser
 
 function buildSphere360(img) {
   var W = 512, H = 256; // sample resolution
@@ -1511,29 +1545,17 @@ function activateProject(key) {
   if (isSphere360) loadSphere360();
   applyShapeConfig(key);
 
-  // 360 mode: camera at center, looking out at sphere surface
+  // 360 mode: camera at center, looking out — use manual drag rotation
   if (isSphere360) {
     controls.dispose();
-    // Camera at exact center, near plane tiny so we can see particles close up
+    controls.enabled = false;
     camera.near = 0.01;
-    camera.far  = SPHERE_R * 3;
+    camera.far  = SPHERE_R * 4;
     camera.position.set(0, 0, 0);
-    camera.lookAt(0, 0, 1);
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
-    // Disable fog so particles at distance aren't clipped
     scene.fog = null;
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping   = true;
-    controls.dampingFactor   = 0.05;
-    controls.autoRotate      = true;
-    controls.autoRotateSpeed = 0.2;
-    controls.enableZoom      = false;
-    controls.enablePan       = false;
-    controls.minDistance     = 0;
-    controls.maxDistance     = 0; // locked at origin
-    controls.target.set(0, 0, 0);
-    controls.update();
+    sphere360Lon = 0; sphere360Lat = 0;
   }
 
   if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
@@ -1624,6 +1646,19 @@ function animate() {
   }
   if (isGhost) {
     updateGhostColors(time);
+  }
+  if (isSphere360) {
+    // Auto-drift when not dragging
+    if (!sphere360Dragging) sphere360Lon += 0.04;
+    // Apply spherical rotation to camera direction
+    var lonRad = sphere360Lon * Math.PI / 180;
+    var latRad = sphere360Lat * Math.PI / 180;
+    camera.position.set(0, 0, 0);
+    camera.lookAt(
+      Math.cos(latRad) * Math.sin(lonRad),
+      Math.sin(latRad),
+      Math.cos(latRad) * Math.cos(lonRad)
+    );
   }
 
   // Mouse velocity for splash
