@@ -220,7 +220,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var COUNT = isMobile ? 4320 : 32400; // 16:9 clean: desktop=240×135, mobile=96×45
+var COUNT = isMobile ? 6480 : 32400; // 16:9 clean: desktop=240×135, mobile=120×54
 var COLOR_LERP = 0.025;
 
 var BLACK = new THREE.Color(0x111111);
@@ -233,9 +233,9 @@ var SHAPE_CONFIG = {
   pulse:    { rotate: 0.0 },
   radar:    { rotate: 0.0 },
   datamap:  { rotate: 0.5 },
-  grid:     { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },  // flat, locked, dead-on
+  grid:     { rotate: 0.0, lockCamera: true, camPos: null },  // camPos computed dynamically
   lattice:  { rotate: 0.5 },
-  line:     { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72], showCarousel: true },
+  line:     { rotate: 0.0, lockCamera: true, camPos: null, showCarousel: true },
   spiral:   { rotate: 0.3 },
   wave:     { rotate: 0.0 },
   ring:     { rotate: 0.4 },
@@ -244,9 +244,9 @@ var SHAPE_CONFIG = {
   text:     { rotate: 0.0 },
   follow:   { rotate: 0.0 },
   splash:   { rotate: 0.0 },
-  led:      { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
-  photo:    { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
-  video:    { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
+  led:      { rotate: 0.0, lockCamera: true, camPos: null },
+  photo:    { rotate: 0.0, lockCamera: true, camPos: null },
+  video:    { rotate: 0.0, lockCamera: true, camPos: null },
 };
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -1261,7 +1261,14 @@ function applyShapeConfig(key) {
   controls.autoRotateSpeed = cfg.rotate;
 
   if (cfg.lockCamera) {
-    var cp = cfg.camPos || [0, 0, 85];
+    // Compute camera Z so 160 world units fills the screen width
+    var fovRad  = camera.fov * Math.PI / 180;
+    var worldW  = 160; // target world units to fill screen
+    var visH    = worldW / camera.aspect;
+    var camZ    = (visH / 2) / Math.tan(fovRad / 2);
+    camZ = Math.max(50, Math.min(130, camZ));
+    var cp = cfg.camPos || [0, 0, camZ];
+    if (!cfg.camPos) cp = [0, 0, camZ];
     // Dispose + recreate controls to flush all damping/velocity state
     controls.dispose();
     camera.position.set(cp[0], cp[1], cp[2]);
@@ -1502,7 +1509,27 @@ window.addEventListener('resize', function() {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
-  if (currentProject === 'line') sizeCarousel();
+
+  // Re-run shape gen for flat locked shapes so they fill the new viewport
+  var flatShapes = { grid: true, led: true, photo: true, video: true };
+  if (flatShapes[currentProject]) {
+    // Recalculate locked camera z to fit viewport
+    var fovRad  = camera.fov * Math.PI / 180;
+    var targetH = 160 / (window.innerWidth / window.innerHeight); // world units
+    var newZ    = (targetH / 2) / Math.tan(fovRad / 2);
+    newZ = Math.max(50, Math.min(120, newZ)); // clamp safe range
+    camera.position.set(0, 0, newZ);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    controls.target.set(0, 0, 0);
+    controls.update();
+  }
+
+  if (currentProject === 'grid')  { initLED(); setTargets(genGrid(),  'grid');  }
+  if (currentProject === 'led')   { initLED(); setTargets(genLED(),   'led');   }
+  if (currentProject === 'photo') { initLED(); setTargets(genLED(),   'photo'); loadPhoto(PHOTO_URL); }
+  if (currentProject === 'line')  { setTargets(genLine(), 'line'); sizeCarousel(); }
+  if (currentProject === 'line')  sizeCarousel();
 });
 
 // ── Debug overlay ─────────────────────────────────────────────────────────────
