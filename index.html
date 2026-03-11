@@ -473,7 +473,7 @@ function loadStatueGLB(callback) {
       var center = new THREE.Vector3(); box.getCenter(center);
       var size   = new THREE.Vector3(); box.getSize(size);
       var maxDim = Math.max(size.x, size.y, size.z);
-      var scale  = 38 / maxDim;
+      var scale  = 76 / maxDim;
 
       // Offset matrix: shift so feet are at bottom, center horizontally
       var normMatrix = new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z);
