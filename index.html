@@ -813,16 +813,10 @@ function setTargets(pts, key) {
 function worldToScreen(wx, wy, wz) {
   var v = new THREE.Vector3(wx, wy, wz);
   v.project(camera);
-  // Use renderer draw buffer size → convert to CSS pixels via DPR
-  // This matches exactly what the GPU rasterizes
-  var dpr = renderer.getPixelRatio();
-  var drawW = renderer.domElement.width;   // physical pixels
-  var drawH = renderer.domElement.height;
-  var cssW  = drawW / dpr;
-  var cssH  = drawH / dpr;
+  var rect = renderer.domElement.getBoundingClientRect();
   return {
-    x: (v.x + 1) / 2 * cssW,
-    y: (1 - v.y) / 2 * cssH
+    x: rect.left + (v.x + 1) / 2 * rect.width,
+    y: rect.top  + (1 - v.y) / 2 * rect.height
   };
 }
 
