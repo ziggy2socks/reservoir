@@ -539,12 +539,12 @@ function genDatamap() {
 // We want dots to bleed slightly past screen edges
 function genGrid() {
   var pts = [];
-  // Figure out how many cols/rows gives us good coverage at z=72
-  // Target: ~90 units wide, ~65 units tall
-  var W = 90, H = 65;
-  var aspect = W / H;
-  var rows = Math.round(Math.sqrt(COUNT / aspect));
-  var cols = Math.round(COUNT / rows);
+  // Cover full screen + bleed past edges at z=72
+  // Cover full screen + bleed past edges at z=72
+  var aspect = window.innerWidth / window.innerHeight;
+  var W = 160, H = W / aspect;
+  var cols = Math.round(Math.sqrt(COUNT * aspect));
+  var rows = Math.ceil(COUNT / cols);
   var spacingX = W / (cols - 1);
   var spacingY = H / (rows - 1);
   for (var r = 0; r < rows; r++) {
