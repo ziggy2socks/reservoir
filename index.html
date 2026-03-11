@@ -194,6 +194,7 @@
   <div class="project-item" data-project="follow">Cursor Follow</div>
   <div class="project-item" data-project="splash">Cursor Splash</div>
   <div class="project-item" data-project="led">LED Grid</div>
+  <div class="project-item" data-project="photo">Photo</div>
 </div>
 
 <script>
@@ -243,6 +244,7 @@ var SHAPE_CONFIG = {
   follow:   { rotate: 0.0 },
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
+  photo:    { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
 };
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -845,6 +847,52 @@ function genLED() {
   return pts;
 }
 
+// ── Photo / Video sampler ─────────────────────────────────────────────────────
+var photoCanvas  = document.createElement('canvas');
+var photoCtx     = photoCanvas.getContext('2d');
+var photoColors  = null;  // sampled per-particle RGB
+var photoLoaded  = false;
+var isPhoto      = false;
+var isVideo      = false;
+
+// Change this URL to any image (must be CORS-friendly or same-origin)
+// Using a famous public domain Muybridge horse photo as default!
+var PHOTO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Muybridge_horse_gallop_animated_2.gif/400px-Muybridge_horse_gallop_animated_2.gif';
+
+function sampleImageToParticles(source) {
+  if (!LED_COLS || !LED_ROWS) initLED();
+  photoCanvas.width  = LED_COLS;
+  photoCanvas.height = LED_ROWS;
+  // Draw source (img or video) scaled to grid resolution
+  photoCtx.drawImage(source, 0, 0, LED_COLS, LED_ROWS);
+  var data = photoCtx.getImageData(0, 0, LED_COLS, LED_ROWS).data;
+  if (!photoColors) photoColors = new Array(COUNT);
+  for (var i = 0; i < COUNT; i++) {
+    var col = LED_COLS, row_i = Math.floor(i / LED_COLS);
+    var ci = i % LED_COLS;
+    if (row_i >= LED_ROWS) { photoColors[i] = photoColors[i] || new THREE.Color(0,0,0); continue; }
+    var px = (row_i * LED_COLS + ci) * 4;
+    if (!photoColors[i]) photoColors[i] = new THREE.Color();
+    photoColors[i].setRGB(data[px]/255, data[px+1]/255, data[px+2]/255);
+  }
+  photoLoaded = true;
+}
+
+function loadPhoto(url) {
+  photoLoaded = false;
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function() {
+    sampleImageToParticles(img);
+    // If still on photo mode, apply colors
+    if (currentProject === 'photo' || currentProject === 'led') {
+      photoLoaded = true;
+    }
+  };
+  img.onerror = function() { console.warn('Photo load failed:', url); };
+  img.src = url;
+}
+
 // ── Muybridge horse — 8 frames, 16×10 bitmap (1=body, 2=legs, 3=head/tail) ──
 // Each frame is a 16-wide × 10-tall pixel art sprite
 var HORSE_FRAMES = [
@@ -1046,6 +1094,7 @@ var isWave   = false;
 var isFollow = false;
 var isSplash = false;
 var isLED    = false;
+var isPhoto  = false;
 
 function setTargets(pts, key) {
   for (var i = 0; i < COUNT; i++) {
@@ -1215,7 +1264,9 @@ function activateProject(key) {
   isFollow = (key === 'follow');
   isSplash = (key === 'splash');
   isLED    = (key === 'led');
-  if (isLED) initLED();
+  isPhoto  = (key === 'photo');
+  if (isLED || isPhoto) initLED();
+  if (isPhoto) loadPhoto(PHOTO_URL);
   applyShapeConfig(key);
 
   if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
@@ -1226,7 +1277,7 @@ function activateProject(key) {
   else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
   else randomizeLerpSpeeds(0.045, 0.06);
 
-  var isAnimated = isRadar || isWave || isFollow || isSplash || isLED;
+  var isAnimated = isRadar || isWave || isFollow || isSplash || isLED || isPhoto;
   if (!isAnimated) {
     var pts;
     switch (key) {
@@ -1246,10 +1297,11 @@ function activateProject(key) {
     }
     setTargets(pts, key);
   } else if (isFollow || isSplash) {
-    // Scatter into sphere first, then cursor takes over
     setTargets(genStudio(), key);
   } else if (isLED) {
     setTargets(genLED(), key);
+  } else if (isPhoto) {
+    setTargets(genLED(), key); // same flat grid layout
   }
 
   document.querySelectorAll('.project-item').forEach(function(el) {
@@ -1345,10 +1397,13 @@ function animate() {
 
     pos.lerp(tgt, lerpSpeeds[i]);
 
-    // LED: override color each frame
+    // LED / Photo: override color each frame
     if (isLED && ledColors && ledColors[i]) {
       colors[i].copy(ledColors[i]);
       targetColors[i].copy(ledColors[i]);
+    } else if (isPhoto && photoLoaded && photoColors && photoColors[i]) {
+      colors[i].lerp(photoColors[i], 0.08); // gentle lerp into image colors
+      targetColors[i].copy(photoColors[i]);
     } else {
       colors[i].lerp(targetColors[i], COLOR_LERP);
     }
