@@ -1541,7 +1541,19 @@ function activateProject(key) {
   isVideoMode = (key === 'video');
   if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
-  if (isVideoMode) startVideo(); else stopVideo();
+  if (isVideoMode) {
+    startVideo();
+    renderer.setClearColor(0x000000, 1);
+    scene.fog = new THREE.FogExp2(0x000000, 0.008);
+    document.body.style.background = '#000';
+  } else {
+    stopVideo();
+    if (key !== 'sphere360') { // sphere360 also kills fog
+      renderer.setClearColor(0xf4f2ee, 1);
+      scene.fog = new THREE.FogExp2(0xf4f2ee, 0.008);
+      document.body.style.background = '#f4f2ee';
+    }
+  }
   if (isSphere360) loadSphere360();
   applyShapeConfig(key);
 
