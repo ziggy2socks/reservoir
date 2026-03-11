@@ -862,17 +862,29 @@ function sizeCarousel() {
 }
 
 function startCarousel() {
-  sizeCarousel();
   carouselGoto(0);
   carouselFrame.style.display = 'block';
-  requestAnimationFrame(function() {
+
+  // Wait until particles have settled into lines — bbox height should be small
+  var maxWait = 120; // frames
+  var frame = 0;
+  function waitForSettle() {
+    frame++;
+    var bbox = getSwarmBbox();
+    var settled = bbox.h < 8 || frame > maxWait; // lines settled when height < 8px
+    if (!settled) {
+      requestAnimationFrame(waitForSettle);
+      return;
+    }
+    sizeCarousel();
     requestAnimationFrame(function() {
       carouselFrame.classList.add('open');
       carouselTimer = setInterval(function() {
         carouselGoto(carouselIndex + 1);
       }, carouselInterval);
     });
-  });
+  }
+  requestAnimationFrame(waitForSettle);
 }
 
 function stopCarousel() {
@@ -892,16 +904,33 @@ function applyShapeConfig(key) {
 
   if (cfg.lockCamera) {
     var cp = cfg.camPos || [0, 0, 85];
-    // Force exact camera state — kill any damping drift
+    // Dispose + recreate controls to flush all damping/velocity state
+    controls.dispose();
     camera.position.set(cp[0], cp[1], cp[2]);
     camera.up.set(0, 1, 0);
     camera.lookAt(0, 0, 0);
     camera.updateMatrixWorld();
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = false;
+    controls.autoRotate    = false;
+    controls.enableRotate  = false;
+    controls.enableZoom    = false;
+    controls.enablePan     = false;
     controls.target.set(0, 0, 0);
-    controls.update(); // flush damping state
-    controls.enabled = false;
+    controls.update();
   } else {
-    controls.enabled = true;
+    // Restore full interactive controls
+    controls.dispose();
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping  = true;
+    controls.dampingFactor  = 0.06;
+    controls.autoRotate     = (cfg.rotate > 0);
+    controls.autoRotateSpeed = cfg.rotate;
+    controls.enablePan      = false;
+    controls.minDistance    = 20;
+    controls.maxDistance    = 150;
+    controls.target.set(0, 0, 0);
+    controls.update();
   }
 
   if (cfg.showCarousel) {
