@@ -220,7 +220,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var COUNT = isMobile ? 6000 : 20000;
+var COUNT = isMobile ? 4320 : 32400; // 16:9 clean: desktop=240×135, mobile=96×45
 var COLOR_LERP = 0.025;
 
 var BLACK = new THREE.Color(0x111111);
