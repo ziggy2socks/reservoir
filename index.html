@@ -104,7 +104,7 @@
       overflow: hidden;
       opacity: 0;
       background: rgba(180,178,174,0.45);
-      transition: opacity 0.5s ease 0.6s;
+      transition: opacity 0.35s ease;
     }
     #line-frame.open #line-carousel { opacity: 1; }
 
@@ -880,11 +880,12 @@ function startCarousel() {
 
   // Wait until particles have settled into lines — bbox height should be small
   var maxWait = 120; // frames
+  var minWait = 10;  // minimum frames before we even check
   var frame = 0;
   function waitForSettle() {
     frame++;
     var bbox = getSwarmBbox();
-    var settled = bbox.h < 8 || frame > maxWait; // lines settled when height < 8px
+    var settled = (frame >= minWait && bbox.h < 20) || frame > maxWait;
     if (!settled) {
       requestAnimationFrame(waitForSettle);
       return;
