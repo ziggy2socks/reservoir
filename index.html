@@ -101,11 +101,10 @@
     /* No CSS lines — particle swarm IS the lines */
     #line-carousel {
       position: absolute;
-      /* Width matched to particle line span (90 world units at z=72 ≈ 61vw on 16:9) */
       left: 0; right: 0;
       margin: 0 auto;
-      width: 61vw;
-      top: -78px; bottom: -78px;
+      /* Width = particle line span. Height = width / (16/9) for true 16:9 */
+      /* JS sets exact px values once camera/screen is known */
       overflow: hidden;
       opacity: 0;
       background: rgba(180,178,174,0.45);
@@ -577,10 +576,10 @@ function genLattice() {
 }
 
 function genLine() {
-  // Two parallel horizontal lines — top and bottom of the carousel frame
+  // Two parallel horizontal lines — top and bottom of the 16:9 carousel frame
   var pts = [];
-  var w = 90;       // full screen width
-  var lineY = 22;   // distance from center (matches CSS #line-top/bottom: ±80px → ~22 world units at z=72)
+  var w = 90;           // line width in world units
+  var lineY = 90 / 16 * 9 / 2;  // half-height of 16:9 box = w*(9/16)/2 ≈ 25.3 wu
   var half = Math.floor(COUNT / 2);
   for (var i = 0; i < half; i++) {
     pts.push({
@@ -827,10 +826,26 @@ function carouselGoto(idx) {
   carouselSlides[carouselIndex].classList.add('active');
 }
 
+function sizeCarousel() {
+  // Project the line endpoints to screen pixels for exact width match
+  // Lines go from x = -45 to x = +45 world units at y=0, z=0
+  var left  = worldToScreen(-45, 0, 0);
+  var right = worldToScreen( 45, 0, 0);
+  var pxW   = right.x - left.x;
+  var pxH   = pxW * (9 / 16); // true 16:9
+  var carousel = document.getElementById('line-carousel');
+  carousel.style.width  = pxW + 'px';
+  carousel.style.height = pxH + 'px';
+  carousel.style.top    = (-pxH / 2) + 'px';
+  carousel.style.bottom = 'auto';
+  // Re-center #line-frame vertically since height changed
+  // (already at top:50% translateY(-50%) so just needs to be square)
+}
+
 function startCarousel() {
+  sizeCarousel();
   carouselGoto(0);
   carouselFrame.style.display = 'block';
-  // Small rAF delay so display:block is painted before class add triggers transition
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
       carouselFrame.classList.add('open');
@@ -1001,6 +1016,7 @@ window.addEventListener('resize', function() {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  if (currentProject === 'line') sizeCarousel();
 });
 
 // ── Debug overlay ─────────────────────────────────────────────────────────────
