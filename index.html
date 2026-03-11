@@ -195,6 +195,7 @@
   <div class="project-item" data-project="splash">Cursor Splash</div>
   <div class="project-item" data-project="led">LED Grid</div>
   <div class="project-item" data-project="photo">Photo</div>
+  <div class="project-item" data-project="video">Video</div>
 </div>
 
 <script>
@@ -245,6 +246,7 @@ var SHAPE_CONFIG = {
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
   photo:    { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
+  video:    { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
 };
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -898,6 +900,58 @@ function loadPhoto(url) {
   img.src = url;
 }
 
+// ── Video sampler ─────────────────────────────────────────────────────────────
+var videoEl = document.createElement('video');
+videoEl.src = '/video.mp4';
+videoEl.loop = true;
+videoEl.muted = true;
+videoEl.playsInline = true;
+videoEl.crossOrigin = 'anonymous';
+videoEl.preload = 'auto';
+videoEl.style.display = 'none';
+document.body.appendChild(videoEl);
+
+var videoColors = null;
+var isVideo = false;
+
+function sampleVideoFrame() {
+  if (!LED_COLS || !LED_ROWS) initLED();
+  if (videoEl.readyState < 2) return; // not enough data yet
+  photoCanvas.width  = LED_COLS;
+  photoCanvas.height = LED_ROWS;
+  photoCtx.save();
+  photoCtx.translate(0, LED_ROWS);
+  photoCtx.scale(1, -1);
+  photoCtx.drawImage(videoEl, 0, 0, LED_COLS, LED_ROWS);
+  photoCtx.restore();
+  var data = photoCtx.getImageData(0, 0, LED_COLS, LED_ROWS).data;
+  if (!videoColors) {
+    videoColors = new Array(COUNT);
+    for (var i = 0; i < COUNT; i++) videoColors[i] = new THREE.Color();
+  }
+  for (var i = 0; i < COUNT; i++) {
+    var ci = i % LED_COLS;
+    var ri = Math.floor(i / LED_COLS);
+    if (ri >= LED_ROWS) continue;
+    var px = (ri * LED_COLS + ci) * 4;
+    videoColors[i].setRGB(data[px]/255, data[px+1]/255, data[px+2]/255);
+  }
+}
+
+function startVideo() {
+  if (!LED_COLS || !LED_ROWS) initLED();
+  if (!videoColors) {
+    videoColors = new Array(COUNT);
+    for (var i = 0; i < COUNT; i++) videoColors[i] = new THREE.Color();
+  }
+  videoEl.currentTime = 0;
+  videoEl.play().catch(function(e) { console.warn('video play:', e); });
+}
+
+function stopVideo() {
+  videoEl.pause();
+}
+
 // ── Muybridge horse — 8 frames, 16×10 bitmap (1=body, 2=legs, 3=head/tail) ──
 // Each frame is a 16-wide × 10-tall pixel art sprite
 var HORSE_FRAMES = [
@@ -1100,6 +1154,7 @@ var isFollow = false;
 var isSplash = false;
 var isLED    = false;
 var isPhoto  = false;
+var isVideoMode = false;
 
 function setTargets(pts, key) {
   for (var i = 0; i < COUNT; i++) {
@@ -1246,6 +1301,7 @@ function activateProject(key) {
 
   // Immediately kill any overlay before particles start moving
   stopCarousel();
+  if (!isVideoMode) stopVideo();
 
   // Datamap = statue only — pre-load, wait for it
   if (key === 'datamap' && !statuePoints && !statueError) {
@@ -1269,9 +1325,12 @@ function activateProject(key) {
   isFollow = (key === 'follow');
   isSplash = (key === 'splash');
   isLED    = (key === 'led');
-  isPhoto  = (key === 'photo');
-  if (isLED || isPhoto) initLED();
+  isPhoto     = (key === 'photo');
+  isVideoMode = (key === 'video');
+  if (isLED || isPhoto || isVideoMode) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
+  if (isVideoMode) startVideo();
+  else stopVideo();
   applyShapeConfig(key);
 
   if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
@@ -1282,7 +1341,7 @@ function activateProject(key) {
   else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
   else randomizeLerpSpeeds(0.045, 0.06);
 
-  var isAnimated = isRadar || isWave || isFollow || isSplash || isLED || isPhoto;
+  var isAnimated = isRadar || isWave || isFollow || isSplash || isLED || isPhoto || isVideoMode;
   if (!isAnimated) {
     var pts;
     switch (key) {
@@ -1305,7 +1364,7 @@ function activateProject(key) {
     setTargets(genStudio(), key);
   } else if (isLED) {
     setTargets(genLED(), key);
-  } else if (isPhoto) {
+  } else if (isPhoto || isVideoMode) {
     setTargets(genLED(), key); // same flat grid layout
   }
 
@@ -1351,6 +1410,9 @@ function animate() {
   if (isLED) {
     ledTime = time;
     updateLEDColors(time);
+  }
+  if (isVideoMode) {
+    sampleVideoFrame();
   }
 
   // Mouse velocity for splash
@@ -1407,8 +1469,11 @@ function animate() {
       colors[i].copy(ledColors[i]);
       targetColors[i].copy(ledColors[i]);
     } else if (isPhoto && photoLoaded && photoColors && photoColors[i]) {
-      colors[i].lerp(photoColors[i], 0.08); // gentle lerp into image colors
+      colors[i].lerp(photoColors[i], 0.08);
       targetColors[i].copy(photoColors[i]);
+    } else if (isVideoMode && videoColors && videoColors[i]) {
+      colors[i].lerp(videoColors[i], 0.25); // faster lerp to keep up with motion
+      targetColors[i].copy(videoColors[i]);
     } else {
       colors[i].lerp(targetColors[i], COLOR_LERP);
     }
