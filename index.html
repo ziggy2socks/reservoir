@@ -1472,6 +1472,13 @@ function activateProject(key) {
   // Immediately kill any overlay before particles start moving
   stopCarousel();
   if (!isVideoMode) stopVideo();
+  // Restore fog and camera clipping if leaving 360 mode
+  if (isSphere360 && key !== 'sphere360') {
+    scene.fog = new THREE.FogExp2(0xf4f2ee, 0.008);
+    camera.near = 0.1;
+    camera.far  = 1000;
+    camera.updateProjectionMatrix();
+  }
 
   // Datamap = statue only — pre-load, wait for it
   if (key === 'datamap' && !statuePoints && !statueError) {
@@ -1504,22 +1511,28 @@ function activateProject(key) {
   if (isSphere360) loadSphere360();
   applyShapeConfig(key);
 
-  // 360 mode: move camera to center of sphere, unlock orbit fully
+  // 360 mode: camera at center, looking out at sphere surface
   if (isSphere360) {
     controls.dispose();
-    camera.position.set(0, 0, 0.001); // tiny offset to avoid gimbal lock
-    camera.lookAt(0, 0, SPHERE_R);
+    // Camera at exact center, near plane tiny so we can see particles close up
+    camera.near = 0.01;
+    camera.far  = SPHERE_R * 3;
+    camera.position.set(0, 0, 0);
+    camera.lookAt(0, 0, 1);
+    camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
+    // Disable fog so particles at distance aren't clipped
+    scene.fog = null;
     controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping  = true;
-    controls.dampingFactor  = 0.05;
-    controls.autoRotate     = true;
-    controls.autoRotateSpeed = 0.25; // very slow drift
-    controls.enableZoom     = false; // stay inside sphere
-    controls.enablePan      = false;
-    controls.minDistance    = 0;
-    controls.maxDistance    = 1; // can't move out
-    controls.target.set(0, 0, SPHERE_R);
+    controls.enableDamping   = true;
+    controls.dampingFactor   = 0.05;
+    controls.autoRotate      = true;
+    controls.autoRotateSpeed = 0.2;
+    controls.enableZoom      = false;
+    controls.enablePan       = false;
+    controls.minDistance     = 0;
+    controls.maxDistance     = 0; // locked at origin
+    controls.target.set(0, 0, 0);
     controls.update();
   }
 
