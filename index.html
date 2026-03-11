@@ -1157,8 +1157,9 @@ var isPhoto  = false;
 var isVideoMode = false;
 
 function setTargets(pts, key) {
+  var n = pts.length;
   for (var i = 0; i < COUNT; i++) {
-    var p = pts[i] || {x:0,y:0,z:0};
+    var p = pts[i % n]; // wrap around instead of falling back to origin
     targets[i].set(p.x, p.y, p.z);
     targetColors[i].copy(BLACK);
   }
