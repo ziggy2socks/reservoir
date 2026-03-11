@@ -1083,17 +1083,34 @@ function buildSphere360(img) {
 
   // Sample COUNT points uniformly across the equirectangular image
   // Use stratified sampling — march through pixels, pick evenly
-  var total = W * H;
-  var step  = total / COUNT;
+  // Build a CDF of cos(lat) weights so equator gets dense sampling, poles get few
+  // Split image into horizontal bands, weight each by cos(latitude)
+  var bandWeights = new Float32Array(H);
+  var weightSum = 0;
+  for (var by = 0; by < H; by++) {
+    var blat = ((by / H) - 0.5) * Math.PI;
+    bandWeights[by] = Math.cos(blat);
+    weightSum += bandWeights[by];
+  }
+  // CDF for stratified sampling
+  var cdf = new Float32Array(H);
+  var running = 0;
+  for (var by = 0; by < H; by++) {
+    running += bandWeights[by] / weightSum;
+    cdf[by] = running;
+  }
 
   for (var si = 0; si < COUNT; si++) {
-    var idx = Math.floor(si * step);
-    var px  = idx % W;
-    var py  = Math.floor(idx / W);
+    // Pick row by inverting CDF (binary search)
+    var u = (si + Math.random()) / COUNT;
+    var lo = 0, hi = H - 1;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (cdf[mid] < u) lo = mid + 1; else hi = mid; }
+    var py = lo;
+    var px = Math.floor(Math.random() * W);
 
     // Equirectangular → spherical coords
-    var lon = (px / W) * Math.PI * 2;          // 0 → 2π
-    var lat = ((py / H) - 0.5) * Math.PI;      // -π/2 → π/2
+    var lon = (px / W) * Math.PI * 2;
+    var lat = ((py / H) - 0.5) * Math.PI;
 
     // Spherical → cartesian (Y-up)
     var x =  SPHERE_R * Math.cos(lat) * Math.sin(lon);
