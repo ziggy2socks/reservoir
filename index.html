@@ -904,10 +904,7 @@ function stopCarousel() {
   clearInterval(carouselTimer);
   carouselTimer = null;
   carouselFrame.classList.remove('open');
-  // Hide after transition completes
-  setTimeout(function() {
-    carouselFrame.style.display = 'none';
-  }, 600);
+  carouselFrame.style.display = 'none'; // instant — particles are already moving
 }
 
 function applyShapeConfig(key) {
@@ -955,6 +952,9 @@ function applyShapeConfig(key) {
 
 function activateProject(key) {
   if (key === currentProject) return;
+
+  // Immediately kill any overlay before particles start moving
+  stopCarousel();
 
   // Datamap = statue only — pre-load, wait for it
   if (key === 'datamap' && !statuePoints && !statueError) {
