@@ -1545,17 +1545,26 @@ function activateProject(key) {
   if (isSphere360) loadSphere360();
   applyShapeConfig(key);
 
-  // 360 mode: camera at center, looking out — use manual drag rotation
+  // 360 mode: camera at center, standard OrbitControls locked to origin
   if (isSphere360) {
     controls.dispose();
-    controls.enabled = false;
     camera.near = 0.01;
     camera.far  = SPHERE_R * 4;
-    camera.position.set(0, 0, 0);
+    camera.position.set(0, 0, 0.01);
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     scene.fog = null;
-    sphere360Lon = 0; sphere360Lat = 0;
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping   = true;
+    controls.dampingFactor   = 0.06;
+    controls.autoRotate      = true;
+    controls.autoRotateSpeed = 0.3;
+    controls.enableZoom      = false;
+    controls.enablePan       = false;
+    controls.minDistance     = 0.01;
+    controls.maxDistance     = 0.01; // locked at center
+    controls.target.set(0, 0, 0);
+    controls.update();
   }
 
   if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
@@ -1647,19 +1656,7 @@ function animate() {
   if (isGhost) {
     updateGhostColors(time);
   }
-  if (isSphere360) {
-    // Auto-drift when not dragging
-    if (!sphere360Dragging) sphere360Lon += 0.04;
-    // Apply spherical rotation to camera direction
-    var lonRad = sphere360Lon * Math.PI / 180;
-    var latRad = sphere360Lat * Math.PI / 180;
-    camera.position.set(0, 0, 0);
-    camera.lookAt(
-      Math.cos(latRad) * Math.sin(lonRad),
-      Math.sin(latRad),
-      Math.cos(latRad) * Math.cos(lonRad)
-    );
-  }
+
 
   // Mouse velocity for splash
   var mDx = mouseScreen.x - lastMouseX;
