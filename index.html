@@ -191,7 +191,7 @@
   <div class="project-item" data-project="dna">DNA</div>
   <div class="project-item" data-project="attractor">Attractor</div>
   <div class="project-item" data-project="text">Text</div>
-  <div class="project-item" data-project="follow">Cursor Follow</div>
+  <div class="project-item" data-project="ghost">Ghost</div>
   <div class="project-item" data-project="splash">Cursor Splash</div>
   <div class="project-item" data-project="led">LED Grid</div>
   <div class="project-item" data-project="photo">Photo</div>
@@ -242,7 +242,7 @@ var SHAPE_CONFIG = {
   dna:      { rotate: 0.3 },
   attractor:{ rotate: 0.2 },
   text:     { rotate: 0.0 },
-  follow:   { rotate: 0.0 },
+  ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
   photo:    { rotate: 0.0, lockCamera: true, camPos: null, contentMode: true },
@@ -804,10 +804,42 @@ window.addEventListener('mousemove', function(e) {
   mouse.copy(camera.position).addScaledVector(dir, dist);
 });
 
-// ── Cursor Follow — particles swarm toward mouse ───────────────────────────
-function genFollow() {
-  // Start as sphere, interaction takes over in animate loop
-  return genStudio();
+// ── Ghost — white field, small dark shape drifting through ────────────────
+var ghostColors = null;
+
+function genGhost() {
+  initLED();
+  return genGrid(); // full-screen flat grid
+}
+
+function updateGhostColors(t) {
+  if (!ghostColors) {
+    ghostColors = new Array(COUNT);
+    for (var i = 0; i < COUNT; i++) ghostColors[i] = new THREE.Color();
+  }
+
+  // Ghost path: slow Lissajous drift across the grid
+  var gx = 0.5 + Math.sin(t * 0.23) * 0.35;         // 0..1 normalized
+  var gy = 0.5 + Math.sin(t * 0.17 + 1.2) * 0.35;
+
+  // Ghost shape: small soft gaussian blob — maybe 8% of grid width
+  var blobR = 0.08;
+
+  for (var i = 0; i < COUNT; i++) {
+    var c  = i % LED_COLS;
+    var r  = Math.floor(i / LED_COLS);
+    if (r >= LED_ROWS) { ghostColors[i].setRGB(1,1,1); continue; }
+    var fx = c / (LED_COLS - 1);
+    var fy = r / (LED_ROWS - 1);
+
+    var dx   = fx - gx, dy = fy - gy;
+    var dist = Math.sqrt(dx*dx + dy*dy);
+    // Soft gaussian falloff — center is darkest, fades to white
+    var dark = Math.exp(-(dist*dist) / (2 * blobR * blobR));
+    var v    = 1.0 - dark * 0.85; // white=1.0, center=0.15
+
+    ghostColors[i].setRGB(v, v, v);
+  }
 }
 
 // ── Cursor Splash — particles rest as sphere, flee cursor on movement ─────
@@ -1191,7 +1223,7 @@ function genRadarFrame(angle) {
 var currentProject = 'studio';
 var isRadar  = false;
 var isWave   = false;
-var isFollow = false;
+var isGhost  = false;
 var isSplash = false;
 var isLED    = false;
 var isPhoto  = false;
@@ -1371,12 +1403,12 @@ function activateProject(key) {
   currentProject = key;
   isRadar  = (key === 'radar');
   isWave   = (key === 'wave');
-  isFollow = (key === 'follow');
+  isGhost  = (key === 'ghost');
   isSplash = (key === 'splash');
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
-  if (isLED || isPhoto || isVideoMode) initLED();
+  if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
   if (isVideoMode) startVideo();
   else stopVideo();
@@ -1390,7 +1422,7 @@ function activateProject(key) {
   else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
   else randomizeLerpSpeeds(0.045, 0.06);
 
-  var isAnimated = isRadar || isWave || isFollow || isSplash || isLED || isPhoto || isVideoMode;
+  var isAnimated = isRadar || isWave || isGhost || isSplash || isLED || isPhoto || isVideoMode;
   if (!isAnimated) {
     var pts;
     switch (key) {
@@ -1409,7 +1441,9 @@ function activateProject(key) {
       default: pts = genStudio();
     }
     setTargets(pts, key);
-  } else if (isFollow || isSplash) {
+  } else if (isGhost) {
+    setTargets(genGhost(), key);
+  } else if (isSplash) {
     setTargets(genStudio(), key);
   } else if (isLED) {
     setTargets(genLED(), key);
@@ -1463,6 +1497,9 @@ function animate() {
   if (isVideoMode) {
     sampleVideoFrame();
   }
+  if (isGhost) {
+    updateGhostColors(time);
+  }
 
   // Mouse velocity for splash
   var mDx = mouseScreen.x - lastMouseX;
@@ -1480,15 +1517,6 @@ function animate() {
       tgt.x += (Math.sin(time * 0.3 + seed)       * 2.0 - tgt.x) * 0.006;
       tgt.y += (Math.cos(time * 0.2 + seed * 1.3) * 2.0 - tgt.y) * 0.006;
       tgt.z += (Math.sin(time * 0.15 + seed * 0.7)* 1.5 - tgt.z) * 0.005;
-    }
-
-    if (isFollow) {
-      // Gently attract toward mouse, keep some spread
-      var spread = 8 + seeds[i] * 15;
-      var angle  = seeds[i] * Math.PI * 2;
-      tgt.x = mouse.x + Math.cos(angle + time * 0.3) * spread * 0.3;
-      tgt.y = mouse.y + Math.sin(angle + time * 0.2) * spread * 0.3;
-      tgt.z = Math.sin(time * 0.2 + seed) * 4;
     }
 
     if (isSplash) {
@@ -1521,8 +1549,11 @@ function animate() {
       colors[i].lerp(photoColors[i], 0.08);
       targetColors[i].copy(photoColors[i]);
     } else if (isVideoMode && videoColors && videoColors[i]) {
-      colors[i].lerp(videoColors[i], 0.25); // faster lerp to keep up with motion
+      colors[i].lerp(videoColors[i], 0.25);
       targetColors[i].copy(videoColors[i]);
+    } else if (isGhost && ghostColors && ghostColors[i]) {
+      colors[i].lerp(ghostColors[i], 0.06); // slow lerp — ghost fades in gently
+      targetColors[i].copy(ghostColors[i]);
     } else {
       colors[i].lerp(targetColors[i], COLOR_LERP);
     }
