@@ -836,20 +836,30 @@ function carouselGoto(idx) {
   carouselSlides[carouselIndex].classList.add('active');
 }
 
+function getSwarmBbox() {
+  // Sample particle positions → find actual screen bounding box
+  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  var step = Math.max(1, Math.floor(COUNT / 500));
+  for (var i = 0; i < COUNT; i += step) {
+    var s = worldToScreen(positions[i].x, positions[i].y, positions[i].z);
+    if (s.x < minX) minX = s.x;
+    if (s.x > maxX) maxX = s.x;
+    if (s.y < minY) minY = s.y;
+    if (s.y > maxY) maxY = s.y;
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
 function sizeCarousel() {
-  // Project the line endpoints to screen pixels for exact width match
-  // Lines go from x = -45 to x = +45 world units at y=0, z=0
-  var left  = worldToScreen(-45, 0, 0);
-  var right = worldToScreen( 45, 0, 0);
-  var pxW   = right.x - left.x;
+  var bbox  = getSwarmBbox();
+  var pxW   = bbox.w;
   var pxH   = pxW * (9 / 16); // true 16:9
   var carousel = document.getElementById('line-carousel');
   carousel.style.width  = pxW + 'px';
   carousel.style.height = pxH + 'px';
+  // Center the box vertically on the frame's midpoint (which is screen center)
   carousel.style.top    = (-pxH / 2) + 'px';
   carousel.style.bottom = 'auto';
-  // Re-center #line-frame vertically since height changed
-  // (already at top:50% translateY(-50%) so just needs to be square)
 }
 
 function startCarousel() {
@@ -1017,6 +1027,7 @@ function animate() {
   colorBuf.needsUpdate = true;
   controls.update();
   composer.render();
+  if (currentProject === 'line') sizeCarousel();
   updateDebug();
 }
 
@@ -1039,24 +1050,15 @@ function updateDebug() {
   if (!debugOn) return;
 
   var W = window.innerWidth, H = window.innerHeight;
-
-  // Project swarm bounding corners at current shape
-  // Use the particle positions to find actual screen bbox
-  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  var step = Math.max(1, Math.floor(COUNT / 500)); // sample 500 particles max
-  for (var i = 0; i < COUNT; i += step) {
-    var s = worldToScreen(positions[i].x, positions[i].y, positions[i].z);
-    if (s.x < minX) minX = s.x;
-    if (s.x > maxX) maxX = s.x;
-    if (s.y < minY) minY = s.y;
-    if (s.y > maxY) maxY = s.y;
-  }
+  var bbox = getSwarmBbox();
+  var minX = bbox.x, minY = bbox.y;
+  var swarmPxW = bbox.w, swarmPxH = bbox.h;
 
   // Draw bounding box
   debugBox.style.left   = minX + 'px';
   debugBox.style.top    = minY + 'px';
-  debugBox.style.width  = (maxX - minX) + 'px';
-  debugBox.style.height = (maxY - minY) + 'px';
+  debugBox.style.width  = swarmPxW + 'px';
+  debugBox.style.height = swarmPxH + 'px';
 
   // World units at z=0 plane visible from current camera
   var camZ   = camera.position.z;
@@ -1064,8 +1066,6 @@ function updateDebug() {
   var visH   = 2 * Math.tan(fovRad / 2) * camZ;
   var visW   = visH * camera.aspect;
 
-  // Swarm size in world units (approx from screen bbox)
-  var swarmPxW = maxX - minX, swarmPxH = maxY - minY;
   var swarmVW  = (swarmPxW / W * 100).toFixed(1);
   var swarmVH  = (swarmPxH / H * 100).toFixed(1);
   var swarmWU_W = (swarmPxW / W * visW).toFixed(1);
