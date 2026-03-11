@@ -93,18 +93,14 @@
     /* ── Line carousel overlay ── */
     #line-frame {
       display: none;
-      position: fixed; left: 0; right: 0;
-      top: 50%; transform: translateY(-50%);
+      position: fixed; inset: 0;   /* full viewport — JS positions carousel inside */
       pointer-events: none;
       z-index: 5;
     }
     /* No CSS lines — particle swarm IS the lines */
     #line-carousel {
       position: absolute;
-      left: 0; right: 0;
-      margin: 0 auto;
-      /* Width = particle line span. Height = width / (16/9) for true 16:9 */
-      /* JS sets exact px values once camera/screen is known */
+      /* All position/size set by JS from live particle bbox */
       overflow: hidden;
       opacity: 0;
       background: rgba(180,178,174,0.45);
@@ -851,14 +847,17 @@ function getSwarmBbox() {
 }
 
 function sizeCarousel() {
-  var bbox  = getSwarmBbox();
-  var pxW   = bbox.w;
-  var pxH   = pxW * (9 / 16); // true 16:9
+  var bbox    = getSwarmBbox();
+  var pxW     = bbox.w;
+  var pxH     = pxW * (9 / 16);
+  // Place box using absolute screen coords — left edge from bbox, vertically centered between the two lines
+  var centerY = bbox.y + bbox.h / 2; // midpoint between the two particle lines
   var carousel = document.getElementById('line-carousel');
+  carousel.style.left   = bbox.x + 'px';
+  carousel.style.top    = (centerY - pxH / 2) + 'px';
   carousel.style.width  = pxW + 'px';
   carousel.style.height = pxH + 'px';
-  // Center the box vertically on the frame's midpoint (which is screen center)
-  carousel.style.top    = (-pxH / 2) + 'px';
+  carousel.style.right  = 'auto';
   carousel.style.bottom = 'auto';
 }
 
@@ -893,9 +892,13 @@ function applyShapeConfig(key) {
 
   if (cfg.lockCamera) {
     var cp = cfg.camPos || [0, 0, 85];
+    // Force exact camera state — kill any damping drift
     camera.position.set(cp[0], cp[1], cp[2]);
+    camera.up.set(0, 1, 0);
     camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
     controls.target.set(0, 0, 0);
+    controls.update(); // flush damping state
     controls.enabled = false;
   } else {
     controls.enabled = true;
