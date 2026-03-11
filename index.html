@@ -191,6 +191,9 @@
   <div class="project-item" data-project="dna">DNA</div>
   <div class="project-item" data-project="attractor">Attractor</div>
   <div class="project-item" data-project="text">Text</div>
+  <div class="project-item" data-project="follow">Cursor Follow</div>
+  <div class="project-item" data-project="splash">Cursor Splash</div>
+  <div class="project-item" data-project="led">LED Grid</div>
 </div>
 
 <script>
@@ -237,6 +240,9 @@ var SHAPE_CONFIG = {
   dna:      { rotate: 0.3 },
   attractor:{ rotate: 0.2 },
   text:     { rotate: 0.0 },
+  follow:   { rotate: 0.0 },
+  splash:   { rotate: 0.0 },
+  led:      { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },
 };
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -776,6 +782,129 @@ function genText() {
   return pts;
 }
 
+// ── Mouse tracking ────────────────────────────────────────────────────────────
+var mouse = new THREE.Vector3(0, 0, 0); // world-space cursor position at z=0 plane
+var mouseScreen = { x: -9999, y: -9999 };
+window.addEventListener('mousemove', function(e) {
+  mouseScreen.x = e.clientX;
+  mouseScreen.y = e.clientY;
+  // Unproject to world space at z=0
+  var rect = renderer.domElement.getBoundingClientRect();
+  var ndcX = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  var ndcY = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  var v = new THREE.Vector3(ndcX, ndcY, 0.5);
+  v.unproject(camera);
+  var dir = v.sub(camera.position).normalize();
+  var dist = -camera.position.z / dir.z;
+  mouse.copy(camera.position).addScaledVector(dir, dist);
+});
+
+// ── Cursor Follow — particles swarm toward mouse ───────────────────────────
+function genFollow() {
+  // Start as sphere, interaction takes over in animate loop
+  return genStudio();
+}
+
+// ── Cursor Splash — particles rest as sphere, flee cursor on movement ─────
+var lastMouseX = 0, lastMouseY = 0, mouseVel = 0;
+function genSplash() {
+  return genStudio();
+}
+
+// ── LED Grid — colored particles on a flat grid, animated ─────────────────
+var ledTime = 0;
+var LED_COLS, LED_ROWS, LED_SPACING;
+var ledColors = null; // per-particle target colors for LED mode
+
+function initLED() {
+  var aspect = window.innerWidth / window.innerHeight;
+  LED_COLS = Math.round(Math.sqrt(COUNT * aspect));
+  LED_ROWS = Math.round(COUNT / LED_COLS);
+  var W = 82, H = W / aspect;
+  LED_SPACING = W / (LED_COLS - 1);
+  ledColors = new Array(COUNT);
+  for (var i = 0; i < COUNT; i++) ledColors[i] = new THREE.Color();
+}
+
+function genLED() {
+  initLED();
+  var pts = [];
+  var aspect = window.innerWidth / window.innerHeight;
+  var W = 82, H = W / aspect;
+  for (var r = 0; r < LED_ROWS; r++) {
+    for (var c = 0; c < LED_COLS; c++) {
+      if (pts.length >= COUNT) break;
+      pts.push({
+        x: -W/2 + c * (W/(LED_COLS-1)),
+        y: -H/2 + r * (H/(LED_ROWS-1)),
+        z: 0
+      });
+    }
+  }
+  while (pts.length < COUNT) pts.push({x:0,y:0,z:0});
+  return pts;
+}
+
+// LED animation modes — cycle through them
+var LED_MODE = 0;
+var ledBallX = 0, ledBallY = 0, ledBallVX = 0.4, ledBallVY = 0.3;
+var ledModeTimer = 0;
+var LED_MODES = ['rainbow', 'ball', 'ripple', 'scan'];
+
+function updateLEDColors(t) {
+  if (!ledColors || !initLED) return;
+  var aspect = window.innerWidth / window.innerHeight;
+  var W = 82, H = W / aspect;
+  var mode = LED_MODES[LED_MODE % LED_MODES.length];
+
+  // Cycle mode every 4 seconds
+  ledModeTimer += 1/60;
+  if (ledModeTimer > 4.0) { ledModeTimer = 0; LED_MODE++; }
+
+  for (var i = 0; i < COUNT; i++) {
+    var c = i % LED_COLS;
+    var r = Math.floor(i / LED_COLS);
+    var fx = c / (LED_COLS - 1); // 0..1
+    var fy = r / (LED_ROWS - 1);
+    var col = ledColors[i];
+
+    if (mode === 'rainbow') {
+      // Diagonal rainbow wave
+      var hue = (fx + fy * 0.5 + t * 0.15) % 1.0;
+      col.setHSL(hue, 0.9, 0.45);
+
+    } else if (mode === 'ball') {
+      // Bouncing glowing ball
+      ledBallX += ledBallVX * 0.016;
+      ledBallY += ledBallVY * 0.016;
+      if (ledBallX > 1 || ledBallX < 0) ledBallVX *= -1;
+      if (ledBallY > 1 || ledBallY < 0) ledBallVY *= -1;
+      var dx = fx - ledBallX, dy = fy - ledBallY;
+      var dist = Math.sqrt(dx*dx + dy*dy);
+      var glow = Math.max(0, 1 - dist * 6);
+      col.setRGB(
+        0.05 + glow * 0.95,
+        0.05 + glow * 0.4,
+        0.05
+      );
+
+    } else if (mode === 'ripple') {
+      // Expanding rings from center
+      var dx2 = fx - 0.5, dy2 = fy - 0.5;
+      var d = Math.sqrt(dx2*dx2 + dy2*dy2) * 2;
+      var wave = Math.sin(d * 10 - t * 4) * 0.5 + 0.5;
+      col.setHSL(0.55 + wave * 0.3, 0.8, 0.2 + wave * 0.35);
+
+    } else if (mode === 'scan') {
+      // Horizontal scan line
+      var scanY = (t * 0.4) % 1.0;
+      var dist2 = Math.abs(fy - scanY);
+      var bright = Math.max(0, 1 - dist2 * 12);
+      col.setHSL(0.33, 0.9, 0.08 + bright * 0.45);
+    }
+  }
+}
+
 // ── Radar (animated) ─────────────────────────────────────────────────────────
 var radarAngle = 0;
 function genRadarFrame(angle) {
@@ -798,8 +927,11 @@ function genRadarFrame(angle) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var currentProject = 'studio';
-var isRadar = false;
-var isWave  = false;
+var isRadar  = false;
+var isWave   = false;
+var isFollow = false;
+var isSplash = false;
+var isLED    = false;
 
 function setTargets(pts, key) {
   for (var i = 0; i < COUNT; i++) {
@@ -964,8 +1096,12 @@ function activateProject(key) {
   }
 
   currentProject = key;
-  isRadar = (key === 'radar');
-  isWave  = (key === 'wave');
+  isRadar  = (key === 'radar');
+  isWave   = (key === 'wave');
+  isFollow = (key === 'follow');
+  isSplash = (key === 'splash');
+  isLED    = (key === 'led');
+  if (isLED) initLED();
   applyShapeConfig(key);
 
   if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
@@ -976,7 +1112,7 @@ function activateProject(key) {
   else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
   else randomizeLerpSpeeds(0.045, 0.06);
 
-  var isAnimated = isRadar || isWave;
+  var isAnimated = isRadar || isWave || isFollow || isSplash || isLED;
   if (!isAnimated) {
     var pts;
     switch (key) {
@@ -995,6 +1131,11 @@ function activateProject(key) {
       default: pts = genStudio();
     }
     setTargets(pts, key);
+  } else if (isFollow || isSplash) {
+    // Scatter into sphere first, then cursor takes over
+    setTargets(genStudio(), key);
+  } else if (isLED) {
+    setTargets(genLED(), key);
   }
 
   document.querySelectorAll('.project-item').forEach(function(el) {
@@ -1036,6 +1177,17 @@ function animate() {
     wavePhase += 0.04;
     setTargets(genWaveFrame(wavePhase), 'wave');
   }
+  if (isLED) {
+    ledTime = time;
+    updateLEDColors(time);
+  }
+
+  // Mouse velocity for splash
+  var mDx = mouseScreen.x - lastMouseX;
+  var mDy = mouseScreen.y - lastMouseY;
+  mouseVel = Math.sqrt(mDx*mDx + mDy*mDy);
+  lastMouseX = mouseScreen.x;
+  lastMouseY = mouseScreen.y;
 
   for (var i = 0; i < COUNT; i++) {
     var pos = positions[i];
@@ -1048,8 +1200,44 @@ function animate() {
       tgt.z += (Math.sin(time * 0.15 + seed * 0.7)* 1.5 - tgt.z) * 0.005;
     }
 
+    if (isFollow) {
+      // Gently attract toward mouse, keep some spread
+      var spread = 8 + seeds[i] * 15;
+      var angle  = seeds[i] * Math.PI * 2;
+      tgt.x = mouse.x + Math.cos(angle + time * 0.3) * spread * 0.3;
+      tgt.y = mouse.y + Math.sin(angle + time * 0.2) * spread * 0.3;
+      tgt.z = Math.sin(time * 0.2 + seed) * 4;
+    }
+
+    if (isSplash) {
+      // Particles rest in sphere, flee cursor on movement
+      var dx = pos.x - mouse.x;
+      var dy = pos.y - mouse.y;
+      var dz = pos.z - mouse.z;
+      var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      var splashR = 18;
+      if (dist < splashR && mouseVel > 2) {
+        var force = (splashR - dist) / splashR * mouseVel * 0.08;
+        tgt.x += (dx / (dist + 0.001)) * force;
+        tgt.y += (dy / (dist + 0.001)) * force;
+        tgt.z += (dz / (dist + 0.001)) * force * 0.5;
+      } else {
+        // Drift back to sphere
+        tgt.x += (-tgt.x) * 0.01;
+        tgt.y += (-tgt.y) * 0.01;
+        tgt.z += (-tgt.z) * 0.01;
+      }
+    }
+
     pos.lerp(tgt, lerpSpeeds[i]);
-    colors[i].lerp(targetColors[i], COLOR_LERP);
+
+    // LED: override color each frame
+    if (isLED && ledColors && ledColors[i]) {
+      colors[i].copy(ledColors[i]);
+      targetColors[i].copy(ledColors[i]);
+    } else {
+      colors[i].lerp(targetColors[i], COLOR_LERP);
+    }
 
     posArr[i*3]   = pos.x;
     posArr[i*3+1] = pos.y;
