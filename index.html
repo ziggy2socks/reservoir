@@ -878,18 +878,9 @@ function startCarousel() {
   carouselGoto(0);
   carouselFrame.style.display = 'block';
 
-  // Wait until particles have settled into lines — bbox height should be small
-  var maxWait = 120; // frames
-  var minWait = 10;  // minimum frames before we even check
-  var frame = 0;
-  function waitForSettle() {
-    frame++;
-    var bbox = getSwarmBbox();
-    var settled = (frame >= minWait && bbox.h < 20) || frame > maxWait;
-    if (!settled) {
-      requestAnimationFrame(waitForSettle);
-      return;
-    }
+  // Fixed delay — lines look settled at ~600ms regardless of lerp
+  setTimeout(function() {
+    if (currentProject !== 'line') return; // user already left
     sizeCarousel();
     requestAnimationFrame(function() {
       carouselFrame.classList.add('open');
@@ -897,8 +888,7 @@ function startCarousel() {
         carouselGoto(carouselIndex + 1);
       }, carouselInterval);
     });
-  }
-  requestAnimationFrame(waitForSettle);
+  }, 600);
 }
 
 function stopCarousel() {
