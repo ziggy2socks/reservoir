@@ -832,6 +832,17 @@ function carouselGoto(idx) {
   carouselSlides[carouselIndex].classList.add('active');
 }
 
+function getParticleRadiusPx() {
+  // Convert world-unit particle size to screen pixels at current camera distance
+  // sizeAttenuation formula: screenSize = (size / z) * (H / (2 * tan(fov/2)))
+  var worldSize = isMobile ? 0.8 : 0.5;
+  var camDist   = camera.position.length();
+  var fovRad    = camera.fov * Math.PI / 180;
+  var H         = window.innerHeight;
+  var px        = (worldSize / camDist) * (H / (2 * Math.tan(fovRad / 2)));
+  return px * 0.5; // radius = half the diameter
+}
+
 function getSwarmBbox() {
   // Sample particle positions → find actual screen bounding box
   var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -843,7 +854,9 @@ function getSwarmBbox() {
     if (s.y < minY) minY = s.y;
     if (s.y > maxY) maxY = s.y;
   }
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+  // Expand by particle radius so bbox covers rendered pixel edges, not just centers
+  var r = Math.ceil(getParticleRadiusPx()) + 1;
+  return { x: minX - r, y: minY - r, w: (maxX - minX) + r*2, h: (maxY - minY) + r*2 };
 }
 
 function sizeCarousel() {
