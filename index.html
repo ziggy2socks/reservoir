@@ -813,6 +813,16 @@ function setTargets(pts, key) {
   }
 }
 
+// ── World → screen projection (used by carousel sizing + debug) ───────────────
+function worldToScreen(wx, wy, wz) {
+  var v = new THREE.Vector3(wx, wy, wz);
+  v.project(camera);
+  return {
+    x: (v.x + 1) / 2 * window.innerWidth,
+    y: (1 - v.y) / 2 * window.innerHeight
+  };
+}
+
 // ── Carousel logic ────────────────────────────────────────────────────────────
 var carouselFrame    = document.getElementById('line-frame');
 var carouselSlides   = document.querySelectorAll('.carousel-slide');
@@ -1024,16 +1034,6 @@ var debugEl   = document.getElementById('debug');
 var debugBox  = document.getElementById('debug-box');
 var debugInfo = document.getElementById('debug-info');
 var debugOn   = false;
-
-// Project a 3D world point to 2D screen pixel coords
-function worldToScreen(wx, wy, wz) {
-  var v = new THREE.Vector3(wx, wy, wz);
-  v.project(camera);
-  return {
-    x: (v.x + 1) / 2 * window.innerWidth,
-    y: (1 - v.y) / 2 * window.innerHeight
-  };
-}
 
 function updateDebug() {
   if (!debugOn) return;
