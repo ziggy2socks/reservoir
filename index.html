@@ -61,12 +61,102 @@
       padding: 10px 20px; border-radius: 6px;
       font-size: 12px; z-index: 999; max-width: 80vw;
     }
+
+    /* ── Line carousel overlay ── */
+    #line-frame {
+      display: none;
+      position: fixed; left: 0; right: 0;
+      top: 50%; transform: translateY(-50%);
+      pointer-events: none;
+      z-index: 5;
+    }
+    #line-top, #line-bottom {
+      position: absolute; left: 0; right: 0;
+      height: 1px; background: #111;
+      /* start collapsed to center, expand outward */
+      transform: scaleX(0);
+      transform-origin: center;
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #line-top    { top: -80px; }
+    #line-bottom { bottom: -80px; }
+    #line-frame.open #line-top,
+    #line-frame.open #line-bottom {
+      transform: scaleX(1);
+    }
+    #line-carousel {
+      position: absolute;
+      left: 10%; right: 10%;
+      top: -79px; bottom: -79px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.4s ease 0.45s; /* fade in after lines settle */
+    }
+    #line-frame.open #line-carousel { opacity: 1; }
+
+    .carousel-slide {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(0,0,0,0.7);
+    }
+    .carousel-slide.active { opacity: 1; }
+    .carousel-slide .slide-label {
+      position: absolute; bottom: 12px; left: 0; right: 0;
+      text-align: center;
+      font-size: 8px; letter-spacing: 0.25em;
+      color: rgba(0,0,0,0.35);
+    }
+    /* Placeholder images — swap these for real ones */
+    .carousel-slide img {
+      max-height: 100%; max-width: 100%;
+      object-fit: contain;
+      display: block;
+    }
   </style>
 </head>
 <body>
 
 <div id="err"></div>
 <div id="loading-hint">Loading…</div>
+
+<!-- Line mode: two ruled lines framing a carousel -->
+<div id="line-frame">
+  <div id="line-top"></div>
+  <div id="line-carousel">
+    <div class="carousel-slide active">
+      <div style="text-align:center; letter-spacing:0.3em; font-size:13px; color:rgba(0,0,0,0.5);">
+        Bid Discovery<br>
+        <span style="font-size:9px; opacity:0.5; display:block; margin-top:8px;">2024 — SAM.gov intelligence</span>
+      </div>
+      <div class="slide-label">01 / 04</div>
+    </div>
+    <div class="carousel-slide">
+      <div style="text-align:center; letter-spacing:0.3em; font-size:13px; color:rgba(0,0,0,0.5);">
+        NYC Permit Pulse<br>
+        <span style="font-size:9px; opacity:0.5; display:block; margin-top:8px;">2024 — Building permit visualization</span>
+      </div>
+      <div class="slide-label">02 / 04</div>
+    </div>
+    <div class="carousel-slide">
+      <div style="text-align:center; letter-spacing:0.3em; font-size:13px; color:rgba(0,0,0,0.5);">
+        311 Radar<br>
+        <span style="font-size:9px; opacity:0.5; display:block; margin-top:8px;">2024 — NYC complaint mapping</span>
+      </div>
+      <div class="slide-label">03 / 04</div>
+    </div>
+    <div class="carousel-slide">
+      <div style="text-align:center; letter-spacing:0.3em; font-size:13px; color:rgba(0,0,0,0.5);">
+        datamap.nyc<br>
+        <span style="font-size:9px; opacity:0.5; display:block; margin-top:8px;">2025 — Urban data atlas</span>
+      </div>
+      <div class="slide-label">04 / 04</div>
+    </div>
+  </div>
+  <div id="line-bottom"></div>
+</div>
 
 <div id="ui">
   <div class="project-item active" data-project="studio">Reservoir</div>
@@ -125,7 +215,7 @@ var SHAPE_CONFIG = {
   datamap:  { rotate: 0.5 },
   grid:     { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72] },  // flat, locked, dead-on
   lattice:  { rotate: 0.5 },
-  line:     { rotate: 0.0 },
+  line:     { rotate: 0.0, lockCamera: true, camPos: [0, 0, 72], showCarousel: true },
   spiral:   { rotate: 0.3 },
   wave:     { rotate: 0.0 },
   ring:     { rotate: 0.4 },
@@ -467,12 +557,23 @@ function genLattice() {
 }
 
 function genLine() {
-  var pts = [], w = 55;
-  for (var i = 0; i < COUNT; i++) {
+  // Two parallel horizontal lines — top and bottom of the carousel frame
+  var pts = [];
+  var w = 90;       // full screen width
+  var lineY = 22;   // distance from center (matches CSS #line-top/bottom: ±80px → ~22 world units at z=72)
+  var half = Math.floor(COUNT / 2);
+  for (var i = 0; i < half; i++) {
     pts.push({
-      x: ((i / COUNT) - 0.5) * w,
-      y: (Math.random()-0.5)*0.25,
-      z: (Math.random()-0.5)*0.25
+      x: ((i / half) - 0.5) * w,
+      y:  lineY + (Math.random()-0.5)*0.15,
+      z: 0
+    });
+  }
+  for (var i = 0; i < COUNT - half; i++) {
+    pts.push({
+      x: ((i / (COUNT - half)) - 0.5) * w,
+      y: -lineY + (Math.random()-0.5)*0.15,
+      z: 0
     });
   }
   return pts;
@@ -693,21 +794,62 @@ function setTargets(pts, key) {
   }
 }
 
+// ── Carousel logic ────────────────────────────────────────────────────────────
+var carouselFrame    = document.getElementById('line-frame');
+var carouselSlides   = document.querySelectorAll('.carousel-slide');
+var carouselIndex    = 0;
+var carouselTimer    = null;
+var carouselInterval = 2800;
+
+function carouselGoto(idx) {
+  carouselSlides[carouselIndex].classList.remove('active');
+  carouselIndex = (idx + carouselSlides.length) % carouselSlides.length;
+  carouselSlides[carouselIndex].classList.add('active');
+}
+
+function startCarousel() {
+  carouselGoto(0);
+  carouselFrame.style.display = 'block';
+  // Small rAF delay so display:block is painted before class add triggers transition
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      carouselFrame.classList.add('open');
+      carouselTimer = setInterval(function() {
+        carouselGoto(carouselIndex + 1);
+      }, carouselInterval);
+    });
+  });
+}
+
+function stopCarousel() {
+  clearInterval(carouselTimer);
+  carouselTimer = null;
+  carouselFrame.classList.remove('open');
+  // Hide after transition completes
+  setTimeout(function() {
+    carouselFrame.style.display = 'none';
+  }, 600);
+}
+
 function applyShapeConfig(key) {
   var cfg = SHAPE_CONFIG[key] || { rotate: 0.4 };
   controls.autoRotate = (cfg.rotate > 0);
   controls.autoRotateSpeed = cfg.rotate;
 
   if (cfg.lockCamera) {
-    // Snap camera to fixed position and lock all interaction
     var cp = cfg.camPos || [0, 0, 85];
     camera.position.set(cp[0], cp[1], cp[2]);
     camera.lookAt(0, 0, 0);
     controls.target.set(0, 0, 0);
     controls.enabled = false;
   } else {
-    // Restore full interaction when leaving a locked shape
     controls.enabled = true;
+  }
+
+  if (cfg.showCarousel) {
+    startCarousel();
+  } else {
+    stopCarousel();
   }
 }
 
