@@ -815,7 +815,7 @@ function genGhost() {
 function updateGhostColors(t) {
   if (!ghostColors) {
     ghostColors = new Array(COUNT);
-    for (var i = 0; i < COUNT; i++) ghostColors[i] = new THREE.Color();
+    for (var i = 0; i < COUNT; i++) ghostColors[i] = new THREE.Color(0xf4f2ee);
   }
 
   // Ghost path: slow Lissajous drift across the grid
@@ -836,9 +836,11 @@ function updateGhostColors(t) {
     var dist = Math.sqrt(dx*dx + dy*dy);
     // Soft gaussian falloff — center is darkest, fades to white
     var dark = Math.exp(-(dist*dist) / (2 * blobR * blobR));
-    var v    = 1.0 - dark * 0.85; // white=1.0, center=0.15
-
-    ghostColors[i].setRGB(v, v, v);
+    // Background is #f4f2ee = rgb(0.957, 0.949, 0.933)
+    var bg = { r: 0.957, g: 0.949, b: 0.933 };
+    // Ghost shadow: slightly darker than bg, gaussian falloff
+    var shadow = dark * 0.18; // subtle — just a whisper darker
+    ghostColors[i].setRGB(bg.r - shadow, bg.g - shadow, bg.b - shadow);
   }
 }
 
