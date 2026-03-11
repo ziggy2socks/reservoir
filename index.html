@@ -864,7 +864,12 @@ function sampleImageToParticles(source) {
   photoCanvas.width  = LED_COLS;
   photoCanvas.height = LED_ROWS;
   // Draw source (img or video) scaled to grid resolution
+  // Flip vertically — canvas Y goes down, particle grid Y goes up
+  photoCtx.save();
+  photoCtx.translate(0, LED_ROWS);
+  photoCtx.scale(1, -1);
   photoCtx.drawImage(source, 0, 0, LED_COLS, LED_ROWS);
+  photoCtx.restore();
   var data = photoCtx.getImageData(0, 0, LED_COLS, LED_ROWS).data;
   if (!photoColors) photoColors = new Array(COUNT);
   for (var i = 0; i < COUNT; i++) {
