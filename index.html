@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Studio — Particle Portfolio</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f4f2ee; overflow: hidden; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    canvas { display: block; }
+
+    /* ── Desktop: vertical left rail ── */
+    #ui {
+      position: fixed; top: 50%; left: 48px;
+      transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 22px;
+      z-index: 10; opacity: 0;
+      animation: fadeIn 2s ease 0.8s forwards;
+    }
+    @keyframes fadeIn { to { opacity: 1; } }
+    .project-item {
+      font-size: 10px; letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.3);
+      cursor: pointer;
+      transition: color 0.3s ease;
+      user-select: none; white-space: nowrap;
+    }
+    .project-item:hover, .project-item.active { color: var(--accent, #000); }
+
+    /* ── Mobile: horizontal bottom bar ── */
+    @media (max-width: 640px) {
+      #ui {
+        top: auto; left: 0; bottom: 0;
+        transform: none; flex-direction: row; gap: 0;
+        width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+        padding: 16px 20px 24px;
+        background: linear-gradient(to top, rgba(244,242,238,0.92) 0%, transparent 100%);
+        scrollbar-width: none;
+      }
+      #ui::-webkit-scrollbar { display: none; }
+      .project-item {
+        flex-shrink: 0; font-size: 9px; letter-spacing: 0.14em;
+        padding: 7px 14px; border-radius: 20px; margin-right: 8px;
+        border: 1px solid rgba(0,0,0,0.15); background: rgba(0,0,0,0.04);
+        transition: color 0.3s, border-color 0.3s, background 0.3s;
+      }
+      .project-item.active { border-color: var(--accent,#000); background: rgba(0,0,0,0.06); }
+    }
+
+    #loading-hint {
+      display: none; position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(0,0,0,0.25); pointer-events: none;
+    }
+    #err {
+      display: none; position: fixed; top: 20px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,0,0,0.8); color: #fff;
+      padding: 10px 20px; border-radius: 6px;
+      font-size: 12px; z-index: 999; max-width: 80vw;
+    }
+  </style>
+</head>
+<body>
+
+<div id="err"></div>
+<div id="loading-hint">Loading…</div>
+
+<div id="ui">
+  <div class="project-item active" data-project="studio">Reservoir</div>
+  <div class="project-item"        data-project="bid">Bid Discovery</div>
+  <div class="project-item"        data-project="pulse">NYC Permit Pulse</div>
+  <div class="project-item"        data-project="radar">311 Radar</div>
+  <div class="project-item"        data-project="datamap">datamap.nyc ✦</div>
+
+  <div class="project-item section-divider" style="pointer-events:none; opacity:0.15; font-size:8px; letter-spacing:0.3em;">— — —</div>
+
+  <div class="project-item" data-project="grid">Grid</div>
+  <div class="project-item" data-project="lattice">Lattice</div>
+  <div class="project-item" data-project="line">Line</div>
+  <div class="project-item" data-project="spiral">Spiral</div>
+  <div class="project-item" data-project="wave">Wave</div>
+  <div class="project-item" data-project="ring">Ring Stack</div>
+  <div class="project-item" data-project="dna">DNA</div>
+  <div class="project-item" data-project="attractor">Attractor</div>
+  <div class="project-item" data-project="text">Text</div>
+</div>
+
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  var el = document.getElementById('err');
+  el.style.display = 'block';
+  el.textContent = 'Error: ' + msg + ' (line ' + line + ')';
+};
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
+
+<script>
+(function() {
+
+var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
+var COUNT = isMobile ? 6000 : 20000;
+var COLOR_LERP = 0.025;
+
+var BLACK = new THREE.Color(0x111111);
+
+// Per-shape config: autoRotate speed (0 = locked still)
+var SHAPE_CONFIG = {
+  studio:   { rotate: 0.6 },
+  bid:      { rotate: 0.4 },
+  pulse:    { rotate: 0.0 },   // skyline looks better still, facing you
+  radar:    { rotate: 0.0 },   // radar sweeps in place
+  datamap:  { rotate: 0.5 },   // statue gets slow rotation to show all sides
+  grid:     { rotate: 0.0 },   // 2D flat grid — no spin
+  lattice:  { rotate: 0.5 },   // 3D lattice cube — spin to show depth
+  line:     { rotate: 0.0 },   // line — still
+  spiral:   { rotate: 0.3 },   // spiral — gentle
+  wave:     { rotate: 0.0 },   // wave — still, you see the undulation
+  ring:     { rotate: 0.4 },
+  dna:      { rotate: 0.3 },
+  attractor:{ rotate: 0.2 },
+  text:     { rotate: 0.0 },   // text faces you
+};
+
+// ── Renderer ──────────────────────────────────────────────────────────────────
+var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(isMobile ? 1.0 : Math.min(window.devicePixelRatio, 1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0xf4f2ee, 1);
+document.body.appendChild(renderer.domElement);
+
+var scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xf4f2ee, 0.008);
+
+var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 85);
+
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+controls.enablePan = false;
+controls.minDistance = 20;
+controls.maxDistance = 150;
+
+var composer = new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+
+// ── Points setup ──────────────────────────────────────────────────────────────
+var mat = new THREE.PointsMaterial({
+  size: isMobile ? 0.8 : 0.5,
+  vertexColors: true,
+  sizeAttenuation: true
+});
+var colorArr = new Float32Array(COUNT * 3);
+var posArr   = new Float32Array(COUNT * 3);
+var colorBuf = new THREE.BufferAttribute(colorArr, 3);
+var posBuf   = new THREE.BufferAttribute(posArr, 3);
+colorBuf.setUsage(THREE.DynamicDrawUsage);
+posBuf.setUsage(THREE.DynamicDrawUsage);
+var ptGeo = new THREE.BufferGeometry();
+ptGeo.setAttribute('position', posBuf);
+ptGeo.setAttribute('color', colorBuf);
+var mesh = new THREE.Points(ptGeo, mat);
+scene.add(mesh);
+
+// ── Per-particle state ────────────────────────────────────────────────────────
+var positions    = new Array(COUNT);
+var targets      = new Array(COUNT);
+var seeds        = new Float32Array(COUNT);
+var colors       = new Array(COUNT);
+var targetColors = new Array(COUNT);
+var lerpSpeeds   = new Float32Array(COUNT);
+
+for (var i = 0; i < COUNT; i++) {
+  var s = rndSphere(40);
+  positions[i]    = new THREE.Vector3(s.x, s.y, s.z);
+  targets[i]      = new THREE.Vector3(s.x, s.y, s.z);
+  seeds[i]        = Math.random() * Math.PI * 2;
+  colors[i]       = new THREE.Color(0x111111);
+  targetColors[i] = new THREE.Color(0x111111);
+}
+
+function randomizeLerpSpeeds(base, spread) {
+  for (var i = 0; i < COUNT; i++) {
+    lerpSpeeds[i] = Math.max(0.005, base + (Math.random() - 0.5) * spread);
+  }
+}
+randomizeLerpSpeeds(0.04, 0.05);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function rndSphere(r) {
+  var theta = Math.random() * Math.PI * 2;
+  var phi   = Math.acos(2 * Math.random() - 1);
+  var rad   = r * Math.cbrt(Math.random());
+  return {
+    x: rad * Math.sin(phi) * Math.cos(theta),
+    y: rad * Math.sin(phi) * Math.sin(theta),
+    z: rad * Math.cos(phi)
+  };
+}
+
+// Area-weighted triangle sampler — ensures uniform surface coverage regardless of mesh density
+function sampleTrianglesUniform(posAttr, indexAttr, matrix, outList, numSamples) {
+  var va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+  var edge1 = new THREE.Vector3(), edge2 = new THREE.Vector3();
+
+  // Build triangle area CDF
+  var triCount = indexAttr ? (indexAttr.count / 3) : (posAttr.count / 3);
+  var areas = new Float64Array(triCount);
+  var totalArea = 0;
+
+  for (var t = 0; t < triCount; t++) {
+    var i0 = indexAttr ? indexAttr.getX(t*3)   : t*3;
+    var i1 = indexAttr ? indexAttr.getX(t*3+1) : t*3+1;
+    var i2 = indexAttr ? indexAttr.getX(t*3+2) : t*3+2;
+    va.fromBufferAttribute(posAttr, i0);
+    vb.fromBufferAttribute(posAttr, i1);
+    vc.fromBufferAttribute(posAttr, i2);
+    edge1.subVectors(vb, va);
+    edge2.subVectors(vc, va);
+    var area = edge1.cross(edge2).length() * 0.5;
+    areas[t] = area;
+    totalArea += area;
+  }
+
+  // CDF
+  var cdf = new Float64Array(triCount);
+  var acc = 0;
+  for (var t = 0; t < triCount; t++) {
+    acc += areas[t];
+    cdf[t] = acc / totalArea;
+  }
+
+  // Sample
+  var pt = new THREE.Vector3();
+  for (var s = 0; s < numSamples; s++) {
+    // Binary search CDF
+    var r = Math.random();
+    var lo = 0, hi = triCount - 1;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (cdf[mid] < r) lo = mid+1; else hi = mid; }
+    var t = lo;
+    var i0 = indexAttr ? indexAttr.getX(t*3)   : t*3;
+    var i1 = indexAttr ? indexAttr.getX(t*3+1) : t*3+1;
+    var i2 = indexAttr ? indexAttr.getX(t*3+2) : t*3+2;
+    va.fromBufferAttribute(posAttr, i0);
+    vb.fromBufferAttribute(posAttr, i1);
+    vc.fromBufferAttribute(posAttr, i2);
+    // Uniform random point in triangle (barycentric)
+    var u = Math.random(), v = Math.random();
+    if (u + v > 1) { u = 1 - u; v = 1 - v; }
+    pt.set(
+      va.x + u*(vb.x-va.x) + v*(vc.x-va.x),
+      va.y + u*(vb.y-va.y) + v*(vc.y-va.y),
+      va.z + u*(vb.z-va.z) + v*(vc.z-va.z)
+    );
+    if (matrix) pt.applyMatrix4(matrix);
+    outList.push({ x: pt.x, y: pt.y, z: pt.z });
+  }
+}
+
+// ── Shape generators ──────────────────────────────────────────────────────────
+function genStudio() {
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) pts.push(rndSphere(40));
+  return pts;
+}
+
+function genBid() {
+  var pts = [];
+  var R = 15, circleN = Math.floor(COUNT * 0.72), handleN = COUNT - circleN;
+  for (var i = 0; i < circleN; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var r = R + (Math.random() - 0.5) * 1.2;
+    pts.push({ x: r*Math.cos(a), y: r*Math.sin(a), z: (Math.random()-0.5)*2 });
+  }
+  var startX = R * Math.cos(-Math.PI * 0.75);
+  var startY = R * Math.sin(-Math.PI * 0.75);
+  var dX = Math.cos(-Math.PI * 0.75), dY = Math.sin(-Math.PI * 0.75);
+  for (var i = 0; i < handleN; i++) {
+    var t = Math.random();
+    pts.push({
+      x: startX + dX*t*18 + (Math.random()-0.5)*0.8,
+      y: startY + dY*t*18 + (Math.random()-0.5)*0.8,
+      z: (Math.random()-0.5)*2
+    });
+  }
+  return pts;
+}
+
+function genPulse() {
+  var buildings = [
+    [-38,6,10],[-32,4,16],[-28,5,22],[-23,3,14],[-20,6,28],
+    [-14,4,20],[-10,5,18],[-5,3,32],[-2,4,24],[2,5,20],
+    [7,4,15],[11,6,26],[17,3,18],[20,5,22],[25,4,14],[29,6,10],[35,3,12]
+  ];
+  var weights = buildings.map(function(b){ return b[1]*b[2]; });
+  var total = weights.reduce(function(a,b){return a+b;},0);
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var r = Math.random() * total, bi = 0;
+    for (var j = 0; j < weights.length; j++) { r -= weights[j]; if (r <= 0) { bi = j; break; } }
+    var b = buildings[bi];
+    pts.push({ x: b[0]+Math.random()*b[1], y: -16+Math.random()*b[2], z: (Math.random()-0.5)*3 });
+  }
+  return pts;
+}
+
+// ── GLB / Statue of Liberty (area-weighted, no fallback) ──────────────────────
+var statuePoints  = null;
+var statueLoading = false;
+var statueError   = false;
+var loadingHint   = document.getElementById('loading-hint');
+
+function loadStatueGLB(callback) {
+  if (statuePoints) { if (callback) callback(); return; }
+  if (statueLoading) return;
+  statueLoading = true;
+  loadingHint.style.display = 'block';
+
+  var loader = new THREE.GLTFLoader();
+  loader.load(
+    'statue-of-liberty.glb',
+    function(gltf) {
+      loadingHint.style.display = 'none';
+
+      // Collect triangles from all meshes — area-weighted sampling
+      var allSamples = [];
+      var box = new THREE.Box3();
+
+      // First pass: gather bounding box
+      gltf.scene.traverse(function(node) {
+        if (!node.isMesh) return;
+        node.updateWorldMatrix(true, false);
+        var pa = node.geometry.attributes.position;
+        if (!pa) return;
+        var v = new THREE.Vector3();
+        for (var i = 0; i < pa.count; i++) {
+          v.fromBufferAttribute(pa, i).applyMatrix4(node.matrixWorld);
+          box.expandByPoint(v);
+        }
+      });
+
+      // Normalize transform: center + scale
+      var center = new THREE.Vector3(); box.getCenter(center);
+      var size   = new THREE.Vector3(); box.getSize(size);
+      var maxDim = Math.max(size.x, size.y, size.z);
+      var scale  = 38 / maxDim;
+
+      // Offset matrix: shift so feet are at bottom, center horizontally
+      var normMatrix = new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z);
+      var scaleMatrix = new THREE.Matrix4().makeScale(scale, scale, scale);
+      var combined = scaleMatrix.multiply(normMatrix);
+
+      // Second pass: area-weighted sampling from every mesh
+      gltf.scene.traverse(function(node) {
+        if (!node.isMesh) return;
+        var geo = node.geometry;
+        if (!geo || !geo.attributes.position) return;
+        node.updateWorldMatrix(true, false);
+
+        // Bake world transform into a single matrix for this node
+        var nodeMatrix = combined.clone().multiply(node.matrixWorld);
+
+        var posAttr = geo.attributes.position;
+        var idxAttr = geo.index;
+
+        // Skip meshes with no triangles
+        var triCount = idxAttr ? (idxAttr.count / 3) : (posAttr.count / 3);
+        if (triCount < 1) return;
+
+        // Allocate samples proportional to triangle count (rough proxy for surface area fraction)
+        // We'll oversample then trim to COUNT
+        var nodeSamples = Math.max(10, Math.round(triCount * 2));
+        sampleTrianglesUniform(posAttr, idxAttr, nodeMatrix, allSamples, nodeSamples);
+      });
+
+      if (allSamples.length === 0) {
+        statueError = true; statueLoading = false; return;
+      }
+
+      statuePoints = allSamples;
+      console.log('Statue loaded:', allSamples.length, 'area-weighted samples');
+      if (callback) callback();
+      if (currentProject === 'datamap') setTargets(genDatamap(), 'datamap');
+    },
+    null,
+    function(err) {
+      console.warn('GLB error:', err);
+      loadingHint.style.display = 'none';
+      statueError = true; statueLoading = false;
+    }
+  );
+}
+
+function genDatamap() {
+  if (!statuePoints || statuePoints.length === 0) return genStudio(); // shouldn't happen
+  var pts = [], n = statuePoints.length;
+  for (var i = 0; i < COUNT; i++) {
+    var v = statuePoints[Math.floor(Math.random() * n)];
+    pts.push({ x: v.x + (Math.random()-0.5)*0.05, y: v.y + (Math.random()-0.5)*0.05, z: v.z + (Math.random()-0.5)*0.05 });
+  }
+  return pts;
+}
+
+// ── Experimental / playground shapes ─────────────────────────────────────────
+
+// TRUE 2D GRID — flat xy plane, z=0, wide spacing so it reads as a grid not paper
+function genGrid() {
+  var pts = [];
+  var cols = Math.round(Math.sqrt(COUNT));
+  var rows = Math.ceil(COUNT / cols);
+  var spacing = 1.4; // tight-ish grid dots
+  var W = (cols - 1) * spacing;
+  var H = (rows - 1) * spacing;
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      if (pts.length >= COUNT) break;
+      pts.push({
+        x: -W/2 + c * spacing,
+        y: -H/2 + r * spacing,
+        z: 0  // strict coplanar
+      });
+    }
+  }
+  return pts;
+}
+
+// TRUE 3D LATTICE — cube grid with depth
+function genLattice() {
+  var pts = [];
+  var side = Math.round(Math.cbrt(COUNT));
+  var spacing = 2.2;
+  var off = -(side - 1) * spacing / 2;
+  for (var x = 0; x < side; x++) {
+    for (var y = 0; y < side; y++) {
+      for (var z = 0; z < side; z++) {
+        if (pts.length >= COUNT) break;
+        pts.push({
+          x: off + x * spacing,
+          y: off + y * spacing,
+          z: off + z * spacing
+        });
+      }
+    }
+  }
+  while (pts.length < COUNT) pts.push({x:0,y:0,z:0});
+  return pts;
+}
+
+function genLine() {
+  var pts = [], w = 55;
+  for (var i = 0; i < COUNT; i++) {
+    pts.push({
+      x: ((i / COUNT) - 0.5) * w,
+      y: (Math.random()-0.5)*0.25,
+      z: (Math.random()-0.5)*0.25
+    });
+  }
+  return pts;
+}
+
+function genSpiral() {
+  var pts = [], arms = 3;
+  for (var i = 0; i < COUNT; i++) {
+    var arm = i % arms;
+    var t = i / COUNT;
+    var angle = t * Math.PI * 8 + (arm * Math.PI * 2 / arms);
+    var r = t * 28;
+    var spread = (Math.random()-0.5) * 2;
+    pts.push({
+      x: (r+spread) * Math.cos(angle),
+      y: (r+spread) * Math.sin(angle),
+      z: (t - 0.5) * 20 + (Math.random()-0.5)*1.5
+    });
+  }
+  return pts;
+}
+
+var wavePhase = 0;
+function genWaveFrame(phase) {
+  var pts = [];
+  var cols = Math.round(Math.sqrt(COUNT * 2));
+  var rows = Math.round(COUNT / cols);
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      if (pts.length >= COUNT) break;
+      var x = (c/cols - 0.5) * 60;
+      var y = (r/rows - 0.5) * 40;
+      var dist = Math.sqrt(x*x + y*y);
+      var z = Math.sin(dist * 0.35 - phase) * 8;
+      pts.push({ x: x, y: y, z: z });
+    }
+  }
+  while (pts.length < COUNT) pts.push({x:0,y:0,z:0});
+  return pts;
+}
+
+function genRingStack() {
+  var pts = [], numRings = 18, perRing = Math.floor(COUNT / numRings);
+  for (var ri = 0; ri < numRings; ri++) {
+    var t = ri / (numRings - 1);
+    var r = 8 + Math.sin(t * Math.PI) * 22;
+    var y = (t - 0.5) * 40;
+    for (var pi = 0; pi < perRing; pi++) {
+      var angle = (pi / perRing) * Math.PI * 2;
+      pts.push({
+        x: (r+(Math.random()-0.5)*0.4)*Math.cos(angle),
+        y: y+(Math.random()-0.5)*0.4,
+        z: (r+(Math.random()-0.5)*0.4)*Math.sin(angle)
+      });
+    }
+  }
+  while (pts.length < COUNT) pts.push({x:0,y:0,z:0});
+  return pts;
+}
+
+// DNA double helix — two counter-wound strands with rungs
+function genDNA() {
+  var pts = [];
+  var strandN = Math.floor(COUNT * 0.55);
+  var rungN   = COUNT - strandN;
+  var perStrand = Math.floor(strandN / 2);
+  var H = 60, R = 10, turns = 8;
+
+  // Strand A
+  for (var i = 0; i < perStrand; i++) {
+    var t = i / perStrand;
+    var angle = t * Math.PI * 2 * turns;
+    pts.push({
+      x: R * Math.cos(angle) + (Math.random()-0.5)*0.4,
+      y: (t - 0.5) * H,
+      z: R * Math.sin(angle) + (Math.random()-0.5)*0.4
+    });
+  }
+  // Strand B (offset by π)
+  for (var i = 0; i < perStrand; i++) {
+    var t = i / perStrand;
+    var angle = t * Math.PI * 2 * turns + Math.PI;
+    pts.push({
+      x: R * Math.cos(angle) + (Math.random()-0.5)*0.4,
+      y: (t - 0.5) * H,
+      z: R * Math.sin(angle) + (Math.random()-0.5)*0.4
+    });
+  }
+  // Rungs — horizontal bars connecting the two strands
+  var numRungs = Math.floor(rungN / 8);
+  var perRung  = 8;
+  for (var ri = 0; ri < numRungs; ri++) {
+    var t  = ri / numRungs;
+    var y  = (t - 0.5) * H;
+    var aA = t * Math.PI * 2 * turns;
+    var aB = aA + Math.PI;
+    var xA = R * Math.cos(aA), zA = R * Math.sin(aA);
+    var xB = R * Math.cos(aB), zB = R * Math.sin(aB);
+    for (var j = 0; j < perRung; j++) {
+      var u = j / (perRung - 1);
+      pts.push({
+        x: xA + (xB-xA)*u + (Math.random()-0.5)*0.3,
+        y: y  + (Math.random()-0.5)*0.2,
+        z: zA + (zB-zA)*u + (Math.random()-0.5)*0.3
+      });
+    }
+  }
+  while (pts.length < COUNT) pts.push({x:0,y:0,z:0});
+  return pts;
+}
+
+// Lorenz strange attractor — chaotic but beautiful
+function genAttractor() {
+  var pts = [];
+  // Lorenz params
+  var sigma = 10, rho = 28, beta = 8/3;
+  var dt = 0.006;
+  var x = 0.1, y = 0, z = 0;
+
+  // Warmup to get onto the attractor
+  for (var i = 0; i < 2000; i++) {
+    var dx = sigma * (y - x);
+    var dy = x * (rho - z) - y;
+    var dz = x * y - beta * z;
+    x += dx * dt; y += dy * dt; z += dz * dt;
+  }
+
+  // Collect points — bounding box is roughly ±20 x, ±25 y, 0-50 z
+  for (var i = 0; i < COUNT; i++) {
+    var dx = sigma * (y - x);
+    var dy = x * (rho - z) - y;
+    var dz = x * y - beta * z;
+    x += dx * dt; y += dy * dt; z += dz * dt;
+    pts.push({
+      x: x * 1.2,
+      y: (z - 25) * 1.1,  // center z around 0
+      z: y * 1.2
+    });
+  }
+  return pts;
+}
+
+// Particle text — "STUDIO" spelled out with dots on a flat plane
+function genText() {
+  var pts = [];
+  // Simple bitmap font for each letter (7x5 grid, 1=filled)
+  var glyphs = {
+    S: [[0,1,1,1,0],[1,0,0,0,0],[0,1,1,1,0],[0,0,0,0,1],[1,1,1,1,0]],
+    T: [[1,1,1,1,1],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0]],
+    U: [[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+    D: [[1,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,0]],
+    I: [[1,1,1,1,1],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[1,1,1,1,1]],
+    O: [[0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]],
+  };
+  var word = ['S','T','U','D','I','O'];
+  var letterW = 5, letterH = 5, gap = 1;
+  var totalW = word.length * (letterW + gap) - gap;
+  var offX = -totalW * 2.5 / 2;
+
+  // Collect all "on" pixel positions
+  var pixels = [];
+  word.forEach(function(ch, li) {
+    var g = glyphs[ch];
+    for (var row = 0; row < letterH; row++) {
+      for (var col = 0; col < letterW; col++) {
+        if (g[row] && g[row][col]) {
+          pixels.push({
+            x: offX + (li * (letterW + gap) + col) * 2.5,
+            y: (letterH / 2 - row) * 2.5
+          });
+        }
+      }
+    }
+  });
+
+  // Fill COUNT points by sampling pixels (each gets cluster of particles)
+  for (var i = 0; i < COUNT; i++) {
+    var px = pixels[i % pixels.length];
+    pts.push({
+      x: px.x + (Math.random()-0.5)*1.0,
+      y: px.y + (Math.random()-0.5)*1.0,
+      z: (Math.random()-0.5)*0.5
+    });
+  }
+  return pts;
+}
+
+// ── Radar (animated) ─────────────────────────────────────────────────────────
+var radarAngle = 0;
+function genRadarFrame(angle) {
+  var pts = [];
+  var radii = [5,10,15,20,25];
+  var ringN = Math.floor(COUNT * 0.6), wedgeN = COUNT - ringN;
+  for (var i = 0; i < ringN; i++) {
+    var r = radii[Math.floor(Math.random()*radii.length)];
+    var a = Math.random() * Math.PI * 2;
+    pts.push({ x:(r+(Math.random()-0.5)*0.8)*Math.cos(a), y:(r+(Math.random()-0.5)*0.8)*Math.sin(a), z:(Math.random()-0.5)*1.5 });
+  }
+  var span = Math.PI / 5;
+  for (var i = 0; i < wedgeN; i++) {
+    var r = Math.random() * 25;
+    var a = angle + (Math.random()-0.5)*span;
+    pts.push({ x:r*Math.cos(a), y:r*Math.sin(a), z:(Math.random()-0.5)*1.5 });
+  }
+  return pts;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+var currentProject = 'studio';
+var isRadar = false;
+var isWave  = false;
+
+function setTargets(pts, key) {
+  for (var i = 0; i < COUNT; i++) {
+    var p = pts[i] || {x:0,y:0,z:0};
+    targets[i].set(p.x, p.y, p.z);
+    targetColors[i].copy(BLACK);
+  }
+}
+
+function applyShapeConfig(key) {
+  var cfg = SHAPE_CONFIG[key] || { rotate: 0.4 };
+  controls.autoRotate = (cfg.rotate > 0);
+  controls.autoRotateSpeed = cfg.rotate;
+}
+
+function activateProject(key) {
+  if (key === currentProject) return;
+
+  // Datamap = statue only — pre-load, wait for it
+  if (key === 'datamap' && !statuePoints && !statueError) {
+    // Start loading, flip currentProject optimistically so we don't double-trigger
+    currentProject = key;
+    isRadar = false; isWave = false;
+    applyShapeConfig(key);
+    document.querySelectorAll('.project-item').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.project === key);
+    });
+    loadStatueGLB(function() {
+      if (currentProject === 'datamap') setTargets(genDatamap(), 'datamap');
+    });
+    randomizeLerpSpeeds(0.045, 0.06);
+    return;
+  }
+
+  currentProject = key;
+  isRadar = (key === 'radar');
+  isWave  = (key === 'wave');
+  applyShapeConfig(key);
+
+  if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
+  else if (key === 'line')    randomizeLerpSpeeds(0.18, 0.10);
+  else if (key === 'grid')    randomizeLerpSpeeds(0.06, 0.07);
+  else if (key === 'lattice') randomizeLerpSpeeds(0.055, 0.06);
+  else if (key === 'wave')    randomizeLerpSpeeds(0.12, 0.04);
+  else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
+  else randomizeLerpSpeeds(0.045, 0.06);
+
+  var isAnimated = isRadar || isWave;
+  if (!isAnimated) {
+    var pts;
+    switch (key) {
+      case 'studio':    pts = genStudio();    break;
+      case 'bid':       pts = genBid();       break;
+      case 'pulse':     pts = genPulse();     break;
+      case 'datamap':   pts = genDatamap();   break;
+      case 'grid':      pts = genGrid();      break;
+      case 'lattice':   pts = genLattice();   break;
+      case 'line':      pts = genLine();      break;
+      case 'spiral':    pts = genSpiral();    break;
+      case 'ring':      pts = genRingStack(); break;
+      case 'dna':       pts = genDNA();       break;
+      case 'attractor': pts = genAttractor(); break;
+      case 'text':      pts = genText();      break;
+      default: pts = genStudio();
+    }
+    setTargets(pts, key);
+  }
+
+  document.querySelectorAll('.project-item').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.project === key);
+  });
+}
+
+// Preload statue as soon as scripts are ready (background, non-blocking)
+setTimeout(function() { loadStatueGLB(); }, 1500);
+
+document.querySelectorAll('.project-item').forEach(function(el) {
+  if (isMobile) {
+    el.addEventListener('click', function() {
+      var key = el.dataset.project;
+      if (!key) return;
+      if (key === currentProject && key !== 'studio') activateProject('studio');
+      else activateProject(key);
+    });
+  } else {
+    el.addEventListener('mouseenter', function() {
+      var key = el.dataset.project;
+      if (key) activateProject(key);
+    });
+  }
+});
+
+// ── Animate ───────────────────────────────────────────────────────────────────
+var clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  var time = clock.getElapsedTime();
+
+  if (isRadar) {
+    radarAngle += 0.015;
+    setTargets(genRadarFrame(radarAngle), 'radar');
+  }
+  if (isWave) {
+    wavePhase += 0.04;
+    setTargets(genWaveFrame(wavePhase), 'wave');
+  }
+
+  for (var i = 0; i < COUNT; i++) {
+    var pos = positions[i];
+    var tgt = targets[i];
+    var seed = seeds[i];
+
+    if (currentProject === 'studio') {
+      tgt.x += (Math.sin(time * 0.3 + seed)       * 2.0 - tgt.x) * 0.006;
+      tgt.y += (Math.cos(time * 0.2 + seed * 1.3) * 2.0 - tgt.y) * 0.006;
+      tgt.z += (Math.sin(time * 0.15 + seed * 0.7)* 1.5 - tgt.z) * 0.005;
+    }
+
+    pos.lerp(tgt, lerpSpeeds[i]);
+    colors[i].lerp(targetColors[i], COLOR_LERP);
+
+    posArr[i*3]   = pos.x;
+    posArr[i*3+1] = pos.y;
+    posArr[i*3+2] = pos.z;
+    colorArr[i*3]   = colors[i].r;
+    colorArr[i*3+1] = colors[i].g;
+    colorArr[i*3+2] = colors[i].b;
+  }
+
+  posBuf.needsUpdate = true;
+  colorBuf.needsUpdate = true;
+  controls.update();
+  composer.render();
+}
+
+// ── Resize ────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', function() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+setTargets(genStudio(), 'studio');
+animate();
+
+})();
+</script>
+</body>
+</html>
