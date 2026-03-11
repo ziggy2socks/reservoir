@@ -196,6 +196,7 @@
   <div class="project-item" data-project="led">LED Grid</div>
   <div class="project-item" data-project="photo">Photo</div>
   <div class="project-item" data-project="video">Video</div>
+  <div class="project-item" data-project="sphere360">360°</div>
 </div>
 
 <script>
@@ -247,6 +248,7 @@ var SHAPE_CONFIG = {
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
   photo:    { rotate: 0.0, lockCamera: true, camPos: null, contentMode: true },
   video:    { rotate: 0.0, lockCamera: true, camPos: null, contentMode: true },
+  sphere360:{ rotate: 0.0 }, // camera goes to center, full orbit freedom
 };
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -1027,6 +1029,90 @@ function stopVideo() {
   videoEl.pause();
 }
 
+// ── 360° Equirectangular sphere ───────────────────────────────────────────────
+var SPHERE_URL = '/photo.jpg'; // swap for any 2:1 equirectangular image
+var sphereColors = null;
+var spherePoints = null;
+var sphereLoaded = false;
+var isSphere360  = false;
+var SPHERE_R     = 55; // radius of the particle sphere
+
+function buildSphere360(img) {
+  var W = 512, H = 256; // sample resolution
+  photoCanvas.width  = W;
+  photoCanvas.height = H;
+  photoCtx.drawImage(img, 0, 0, W, H);
+  var data = photoCtx.getImageData(0, 0, W, H).data;
+
+  spherePoints = [];
+  sphereColors = [];
+
+  // Sample COUNT points uniformly across the equirectangular image
+  // Use stratified sampling — march through pixels, pick evenly
+  var total = W * H;
+  var step  = total / COUNT;
+
+  for (var si = 0; si < COUNT; si++) {
+    var idx = Math.floor(si * step);
+    var px  = idx % W;
+    var py  = Math.floor(idx / W);
+
+    // Equirectangular → spherical coords
+    var lon = (px / W) * Math.PI * 2;          // 0 → 2π
+    var lat = ((py / H) - 0.5) * Math.PI;      // -π/2 → π/2
+
+    // Spherical → cartesian (Y-up)
+    var x =  SPHERE_R * Math.cos(lat) * Math.sin(lon);
+    var y = -SPHERE_R * Math.sin(lat);          // flip Y so top of image = up
+    var z =  SPHERE_R * Math.cos(lat) * Math.cos(lon);
+
+    spherePoints.push({ x: x, y: y, z: z });
+
+    var di = (py * W + px) * 4;
+    sphereColors.push(new THREE.Color(
+      data[di] / 255,
+      data[di+1] / 255,
+      data[di+2] / 255
+    ));
+  }
+
+  sphereLoaded = true;
+  console.log('360 sphere built:', spherePoints.length, 'points');
+
+  if (currentProject === 'sphere360') {
+    setTargets(spherePoints, 'sphere360');
+    // Apply colors directly
+    for (var i = 0; i < COUNT; i++) {
+      targetColors[i].copy(sphereColors[i]);
+    }
+  }
+}
+
+function loadSphere360() {
+  sphereLoaded = false;
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function() { buildSphere360(img); };
+  img.onerror = function() { console.warn('360 image failed'); };
+  img.src = SPHERE_URL;
+}
+
+function genSphere360() {
+  if (spherePoints && sphereLoaded) return spherePoints;
+  // Return a plain sphere shell as placeholder while loading
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var theta = Math.random() * Math.PI * 2;
+    var phi   = Math.acos(2 * Math.random() - 1);
+    pts.push({
+      x: SPHERE_R * Math.sin(phi) * Math.cos(theta),
+      y: SPHERE_R * Math.sin(phi) * Math.sin(theta),
+      z: SPHERE_R * Math.cos(phi)
+    });
+  }
+  return pts;
+}
+
 // ── Muybridge horse — 8 frames, 16×10 bitmap (1=body, 2=legs, 3=head/tail) ──
 // Each frame is a 16-wide × 10-tall pixel art sprite
 var HORSE_FRAMES = [
@@ -1225,8 +1311,9 @@ function genRadarFrame(angle) {
 var currentProject = 'studio';
 var isRadar  = false;
 var isWave   = false;
-var isGhost  = false;
-var isSplash = false;
+var isGhost    = false;
+var isSplash   = false;
+var isSphere360 = false;
 var isLED    = false;
 var isPhoto  = false;
 var isVideoMode = false;
@@ -1405,16 +1492,36 @@ function activateProject(key) {
   currentProject = key;
   isRadar  = (key === 'radar');
   isWave   = (key === 'wave');
-  isGhost  = (key === 'ghost');
-  isSplash = (key === 'splash');
+  isGhost    = (key === 'ghost');
+  isSphere360 = (key === 'sphere360');
+  isSplash   = (key === 'splash');
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
   if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
-  if (isVideoMode) startVideo();
-  else stopVideo();
+  if (isVideoMode) startVideo(); else stopVideo();
+  if (isSphere360) loadSphere360();
   applyShapeConfig(key);
+
+  // 360 mode: move camera to center of sphere, unlock orbit fully
+  if (isSphere360) {
+    controls.dispose();
+    camera.position.set(0, 0, 0.001); // tiny offset to avoid gimbal lock
+    camera.lookAt(0, 0, SPHERE_R);
+    camera.updateMatrixWorld();
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping  = true;
+    controls.dampingFactor  = 0.05;
+    controls.autoRotate     = true;
+    controls.autoRotateSpeed = 0.25; // very slow drift
+    controls.enableZoom     = false; // stay inside sphere
+    controls.enablePan      = false;
+    controls.minDistance    = 0;
+    controls.maxDistance    = 1; // can't move out
+    controls.target.set(0, 0, SPHERE_R);
+    controls.update();
+  }
 
   if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
   else if (key === 'line')    randomizeLerpSpeeds(0.18, 0.10);
@@ -1424,7 +1531,7 @@ function activateProject(key) {
   else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
   else randomizeLerpSpeeds(0.045, 0.06);
 
-  var isAnimated = isRadar || isWave || isGhost || isSplash || isLED || isPhoto || isVideoMode;
+  var isAnimated = isRadar || isWave || isGhost || isSplash || isLED || isPhoto || isVideoMode || isSphere360;
   if (!isAnimated) {
     var pts;
     switch (key) {
@@ -1445,6 +1552,9 @@ function activateProject(key) {
     setTargets(pts, key);
   } else if (isGhost) {
     setTargets(genGhost(), key);
+  } else if (isSphere360) {
+    setTargets(genSphere360(), key);
+    if (sphereLoaded) for (var si = 0; si < COUNT; si++) targetColors[si].copy(sphereColors[si]);
   } else if (isSplash) {
     setTargets(genStudio(), key);
   } else if (isLED) {
@@ -1554,8 +1664,11 @@ function animate() {
       colors[i].lerp(videoColors[i], 0.25);
       targetColors[i].copy(videoColors[i]);
     } else if (isGhost && ghostColors && ghostColors[i]) {
-      colors[i].lerp(ghostColors[i], 0.06); // slow lerp — ghost fades in gently
+      colors[i].lerp(ghostColors[i], 0.06);
       targetColors[i].copy(ghostColors[i]);
+    } else if (isSphere360 && sphereLoaded && sphereColors && sphereColors[i]) {
+      colors[i].lerp(sphereColors[i], 0.04);
+      targetColors[i].copy(sphereColors[i]);
     } else {
       colors[i].lerp(targetColors[i], COLOR_LERP);
     }
