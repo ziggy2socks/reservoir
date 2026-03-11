@@ -73,11 +73,12 @@
     /* No CSS lines — particle swarm IS the lines */
     #line-carousel {
       position: absolute;
-      left: 8%; right: 8%;
+      /* Width matched to particle line span (90 world units at z=72 ≈ 61vw on 16:9) */
+      left: 50%; transform: translateX(-50%);
+      width: min(61vw, 90vh);   /* keep it proportional on tall/narrow screens */
       top: -78px; bottom: -78px;
       overflow: hidden;
       opacity: 0;
-      /* grey rect appears after particles finish forming (~600ms) */
       background: rgba(180,178,174,0.45);
       transition: opacity 0.5s ease 0.6s;
     }
