@@ -855,7 +855,7 @@ function getSwarmBbox() {
     if (s.y > maxY) maxY = s.y;
   }
   // Expand by particle radius so bbox covers rendered pixel edges, not just centers
-  var r = Math.ceil(getParticleRadiusPx()) + 1;
+  var r = Math.round(getParticleRadiusPx());
   return { x: minX - r, y: minY - r, w: (maxX - minX) + r*2, h: (maxY - minY) + r*2 };
 }
 
