@@ -69,8 +69,8 @@
     }
     #debug.on { display: block; }
     /* crosshair */
-    #debug-h { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,100,0,0.4); }
-    #debug-v { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(255,100,0,0.4); }
+    #debug-h { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,100,0,0.4); display: none; }
+    #debug-v { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(255,100,0,0.4); display: none; }
     /* swarm bounding box — sized by JS */
     #debug-box {
       position: absolute; border: 1px dashed rgba(255,100,0,0.7);
@@ -307,6 +307,7 @@ for (var i = 0; i < COUNT; i++) {
   seeds[i]        = Math.random() * Math.PI * 2;
   colors[i]       = new THREE.Color(0x111111);
   targetColors[i] = new THREE.Color(0x111111);
+  lerpSpeeds[i]   = 0.04;
 }
 
 function randomizeLerpSpeeds(base, spread) {
@@ -1554,6 +1555,8 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'd' || e.key === 'D') {
     debugOn = !debugOn;
     debugEl.classList.toggle('on', debugOn);
+    document.getElementById('debug-h').style.display = debugOn ? 'block' : 'none';
+    document.getElementById('debug-v').style.display = debugOn ? 'block' : 'none';
   }
 });
 
