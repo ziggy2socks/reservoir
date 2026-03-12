@@ -453,9 +453,9 @@ function sampleTypeImage(idx, callback) {
     for (var i = 0; i < COUNT; i++) {
       var p = darkPixels[i % darkPixels.length];
       pts.push({
-        x:  (p.px / W - 0.5) * worldW + (Math.random()-0.5)*0.05,
-        y: -(p.py / H - 0.5) * worldH + (Math.random()-0.5)*0.05,
-        z:  (Math.random()-0.5)*0.1
+        x:  (p.px / W - 0.5) * worldW,
+        y: -(p.py / H - 0.5) * worldH,
+        z:  0
       });
     }
     typePoints[idx] = pts;
@@ -1645,13 +1645,7 @@ function activateProject(key) {
   isWave   = (key === 'wave');
   isGhost    = (key === 'ghost');
   isSplash   = (key === 'splash');
-  if (key === 'type') {
-    startTypeCycle();
-    mat.size = isMobile ? 0.4 : 0.25;
-  } else {
-    stopTypeCycle();
-    mat.size = isMobile ? 0.8 : 0.5;
-  }
+  if (key === 'type') startTypeCycle(); else stopTypeCycle();
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
