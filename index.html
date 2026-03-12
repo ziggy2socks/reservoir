@@ -1579,14 +1579,14 @@ function activateProject(key) {
   if (isPhoto) loadPhoto(PHOTO_URL);
   if (isVideoMode) {
     startVideo();
-    clearTimeout(videoBgTimer);
-    videoBg.style.display = 'block';
-    videoBgTimer = setTimeout(function() { videoBg.classList.add('visible'); }, 1100);
+    renderer.setClearColor(0x0a0a0a, 1);
+    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.008);
+    document.body.style.background = '#0a0a0a';
   } else {
     stopVideo();
-    videoBg.classList.remove('visible');
-    clearTimeout(videoBgTimer);
-    setTimeout(function() { videoBg.style.display = 'none'; }, 650);
+    renderer.setClearColor(0xf4f2ee, 1);
+    scene.fog = new THREE.FogExp2(0xf4f2ee, 0.008);
+    document.body.style.background = '#f4f2ee';
   }
   if (isSphere360) loadSphere360();
   applyShapeConfig(key);
@@ -1700,14 +1700,7 @@ function animate() {
   }
   if (isVideoMode) {
     sampleVideoFrame();
-    if (videoBg.classList.contains('visible')) {
-      var bb  = getSwarmBbox();
-      var pad = 8;
-      videoBg.style.left   = (bb.x - pad) + 'px';
-      videoBg.style.top    = (bb.y - pad) + 'px';
-      videoBg.style.width  = (bb.w + pad*2) + 'px';
-      videoBg.style.height = (bb.h + pad*2) + 'px';
-    }
+
   }
   if (isGhost) {
     updateGhostColors(time);
