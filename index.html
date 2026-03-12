@@ -1577,17 +1577,7 @@ function activateProject(key) {
   isVideoMode = (key === 'video');
   if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
-  if (isVideoMode) {
-    startVideo();
-    renderer.setClearColor(0x0a0a0a, 1);
-    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.008);
-    document.body.style.background = '#0a0a0a';
-  } else {
-    stopVideo();
-    renderer.setClearColor(0xf4f2ee, 1);
-    scene.fog = new THREE.FogExp2(0xf4f2ee, 0.008);
-    document.body.style.background = '#f4f2ee';
-  }
+  if (isVideoMode) startVideo(); else stopVideo();
   if (isSphere360) loadSphere360();
   applyShapeConfig(key);
 
