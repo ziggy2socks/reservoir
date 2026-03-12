@@ -444,7 +444,7 @@ function sampleTypeImage(idx, callback) {
     }
     if (!darkPixels.length) { callback(null); return; }
 
-    var worldW = isMobile ? 50 : 110, worldH = worldW * H / W;
+    var worldW = isMobile ? 50 : 99, worldH = worldW * H / W;
     var pts = [];
     for (var i = 0; i < COUNT; i++) {
       var p = darkPixels[i % darkPixels.length];
@@ -1760,13 +1760,12 @@ function animate() {
       var dz = pos.z - mouse.z;
       var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
       if (currentProject === 'type') {
-        var splashR = 8; // tighter radius for type
-        if (dist < splashR && mouseVel > 3) {
-          // Flee cursor
-          var force = (splashR - dist) / splashR * mouseVel * 0.06;
+        var splashR = 18;
+        if (dist < splashR && mouseVel > 2) {
+          var force = (splashR - dist) / splashR * mouseVel * 0.08;
           tgt.x += (dx / (dist + 0.001)) * force;
           tgt.y += (dy / (dist + 0.001)) * force;
-          tgt.z += (dz / (dist + 0.001)) * force * 0.3;
+          tgt.z += (dz / (dist + 0.001)) * force * 0.3; // flatter than sphere splash
         } else if (typeHome) {
           // Restore to letterform home position
           tgt.x = typeHome[i].x;
