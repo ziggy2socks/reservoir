@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Studio — Particle Portfolio</title>
+  <link rel="preload" href="/reservoir-c.png" as="image">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #f4f2ee; overflow: hidden; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
@@ -410,7 +411,7 @@ function sampleTrianglesUniform(posAttr, indexAttr, matrix, outList, numSamples)
 
 // ── Shape generators ──────────────────────────────────────────────────────────
 // ── Type experiment — cycles through 3 Reservoir PNG logos every 30s ─────
-var TYPE_IMGS = ['/reservoir-a.png', '/reservoir-b.png', '/reservoir-c.png'];
+var TYPE_IMGS = ['/reservoir-c.png']; // single logo — no cycling
 var typePoints  = [null, null, null];
 var typeLoaded  = [false, false, false];
 var typeCurrent = -1;
@@ -442,7 +443,7 @@ function sampleTypeImage(idx, callback) {
     }
     if (!darkPixels.length) { callback(null); return; }
 
-    var worldW = 80, worldH = worldW * H / W;
+    var worldW = isMobile ? 50 : 110, worldH = worldW * H / W;
     var pts = [];
     for (var i = 0; i < COUNT; i++) {
       var p = darkPixels[i % darkPixels.length];
@@ -468,15 +469,12 @@ function activateTypeIdx(idx) {
 }
 
 function startTypeCycle() {
-  clearInterval(typeTimer);
-  var order = [0,1,2].sort(function() { return Math.random()-0.5; });
-  var step = 0;
-  activateTypeIdx(order[step]);
-  typeTimer = setInterval(function() {
-    if (currentProject !== 'type') { clearInterval(typeTimer); return; }
-    step = (step + 1) % 3;
-    activateTypeIdx(order[step]);
-  }, 20000);
+  // Single image — if already loaded use cached points directly, else load
+  if (typeLoaded[0] && typePoints[0]) {
+    setTargets(typePoints[0], 'type');
+  } else {
+    activateTypeIdx(0);
+  }
 }
 
 function stopTypeCycle() { clearInterval(typeTimer); typeTimer = null; }
@@ -1660,8 +1658,7 @@ function activateProject(key) {
 
   var isAnimated = isRadar || isWave || isGhost || isSplash || isLED || isPhoto || isVideoMode;
   if (key === 'type') {
-    // startTypeCycle() handles setTargets async — show placeholder sphere briefly
-    setTargets(genType(), key);
+    // startTypeCycle() handles setTargets directly — no placeholder needed
   } else if (!isAnimated) {
     var pts;
     switch (key) {
@@ -1754,8 +1751,8 @@ function animate() {
     var seed = seeds[i];
 
 
-    if (isSplash) {
-      // Particles rest in sphere, flee cursor on movement
+    if (isSplash || currentProject === 'type') {
+      // Particles flee cursor on fast movement
       var dx = pos.x - mouse.x;
       var dy = pos.y - mouse.y;
       var dz = pos.z - mouse.z;
@@ -1766,12 +1763,13 @@ function animate() {
         tgt.x += (dx / (dist + 0.001)) * force;
         tgt.y += (dy / (dist + 0.001)) * force;
         tgt.z += (dz / (dist + 0.001)) * force * 0.5;
-      } else {
-        // Drift back to sphere
+      } else if (isSplash) {
+        // Splash: drift back to sphere origin
         tgt.x += (-tgt.x) * 0.01;
         tgt.y += (-tgt.y) * 0.01;
         tgt.z += (-tgt.z) * 0.01;
       }
+      // Type: no drift-back needed — normal lerp returns particles to letterform targets
     }
 
     pos.lerp(tgt, lerpSpeeds[i]);
@@ -1901,11 +1899,11 @@ document.addEventListener('keydown', function(e) {
 // Boot: load first Type image, place particles directly at letterform positions
 // so page opens with text already formed (no morph-in animation)
 (function bootType() {
-  var startIdx = Math.floor(Math.random() * 3);
-  typeCurrent = startIdx;
-  sampleTypeImage(startIdx, function(pts) {
+  // Boot with reservoir-c — snap to position, no morph-in
+  typeCurrent = 0;
+  sampleTypeImage(0, function(pts) {
     if (!pts) { animate(); return; }
-    // Place particles directly — skip lerp by writing to both pos and target
+    // Write positions AND targets directly — particles appear already formed
     var posArr = ptGeo.attributes.position.array;
     for (var i = 0; i < COUNT; i++) {
       var p = pts[i % pts.length];
@@ -1913,24 +1911,13 @@ document.addEventListener('keydown', function(e) {
       posArr[i*3+1] = p.y;
       posArr[i*3+2] = p.z;
       targets[i].set(p.x, p.y, p.z);
+      lerpSpeeds[i] = 1.0; // teleport this frame
     }
     ptGeo.attributes.position.needsUpdate = true;
-    typeLoaded[startIdx] = true;
-    typePoints[startIdx] = pts;
-    // Snap lerp speeds to 1.0 so particles teleport to positions instantly
-    for (var i = 0; i < COUNT; i++) lerpSpeeds[i] = 1.0;
-    // Start cycle at 20s, preload others in background
-    var order = [0,1,2].sort(function() { return Math.random()-0.5; });
-    var step = order.indexOf(startIdx);
-    typeTimer = setInterval(function() {
-      if (currentProject !== 'type') { clearInterval(typeTimer); return; }
-      step = (step + 1) % 3;
-      activateTypeIdx(order[step]);
-    }, 20000);
-    // Kill initial autoRotate, apply correct shape config
+    // Reset lerp speeds to normal after one frame so future morphs animate
+    setTimeout(function() { randomizeLerpSpeeds(0.04, 0.03); }, 32);
+    // Apply shape config — kills autoRotate from initial controls
     applyShapeConfig('type');
-    // Preload other two images
-    [0,1,2].forEach(function(i) { if (i !== startIdx) sampleTypeImage(i, function(){}); });
   });
   animate();
 })();
