@@ -412,32 +412,51 @@ var RESERVOIR_IMGS = ['/reservoir-a.png', '/reservoir-b.png', '/reservoir-c.png'
 var reservoirPoints  = [null, null, null]; // cached point arrays per image
 var reservoirLoaded  = [false, false, false];
 var reservoirCurrent = -1; // which one is active
-var reservoirCanvas  = document.createElement('canvas');
-var reservoirCtx     = reservoirCanvas.getContext('2d');
+// Each image gets its own canvas to avoid race conditions during parallel preload
+var reservoirCanvases = [0,1,2].map(function() { return document.createElement('canvas'); });
+var reservoirCtxs     = reservoirCanvases.map(function(c) { return c.getContext('2d'); });
+// Keep legacy vars pointing at index 0 for any remaining references
+var reservoirCanvas = reservoirCanvases[0];
+var reservoirCtx    = reservoirCtxs[0];
 var reservoirTimer   = null;
 
 function sampleReservoirImage(idx, callback) {
   if (reservoirLoaded[idx]) { callback(reservoirPoints[idx]); return; }
   var img = new Image();
-  img.crossOrigin = 'anonymous';
   img.onload = function() {
+    var cnv = reservoirCanvases[idx], ctx2d = reservoirCtxs[idx];
     var W = 320, H = Math.round(W * img.height / img.width);
-    reservoirCanvas.width  = W;
-    reservoirCanvas.height = H;
-    reservoirCtx.fillStyle = '#fff';
-    reservoirCtx.fillRect(0, 0, W, H);
-    reservoirCtx.drawImage(img, 0, 0, W, H);
+    cnv.width  = W;
+    cnv.height = H;
+    ctx2d.fillStyle = '#fff';
+    ctx2d.fillRect(0, 0, W, H);
+    ctx2d.drawImage(img, 0, 0, W, H);
     var data;
-    try { data = reservoirCtx.getImageData(0, 0, W, H).data; }
+    try { data = ctx2d.getImageData(0, 0, W, H).data; }
     catch(e) { console.warn('reservoir canvas tainted', e); callback(null); return; }
 
-    // Collect dark pixels (text = black on white)
+    // Collect dark pixels — use alpha channel too (handles transparent PNGs)
+    // Weight by darkness so denser pixels get more particles
     var darkPixels = [];
     for (var py = 0; py < H; py++) {
       for (var px = 0; px < W; px++) {
         var di = (py * W + px) * 4;
+        var alpha = data[di+3];
         var brightness = (data[di] + data[di+1] + data[di+2]) / 3;
-        if (brightness < 128) darkPixels.push({ px: px, py: py });
+        // Count pixel as dark if either: low brightness OR high alpha on transparent bg
+        var isDark = (alpha > 64 && brightness < 200) || (alpha < 64 && brightness < 100);
+        if (isDark) darkPixels.push({ px: px, py: py });
+      }
+    }
+    // Fallback: if very few dark pixels found, lower threshold aggressively
+    if (darkPixels.length < 100) {
+      darkPixels = [];
+      for (var py = 0; py < H; py++) {
+        for (var px = 0; px < W; px++) {
+          var di = (py * W + px) * 4;
+          var brightness = (data[di] + data[di+1] + data[di+2]) / 3;
+          if (brightness < 240) darkPixels.push({ px: px, py: py });
+        }
       }
     }
 
