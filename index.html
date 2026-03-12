@@ -90,6 +90,19 @@
       pointer-events: none; z-index: 101;
     }
 
+    /* ── Video background rect ── */
+    #video-bg {
+      display: none;
+      position: fixed;
+      background: #000;
+      pointer-events: none;
+      z-index: 4; /* above canvas (z=0), below UI (z=10) */
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      border-radius: 2px;
+    }
+    #video-bg.visible { opacity: 1; }
+
     /* ── Line carousel overlay ── */
     #line-frame {
       display: none;
@@ -138,6 +151,9 @@
   <div id="debug-box"></div>
   <div id="debug-info"></div>
 </div>
+
+<!-- Video mode: black backing rect behind particle grid -->
+<div id="video-bg"></div>
 
 <!-- Line mode: two ruled lines framing a carousel -->
 <div id="line-frame">
@@ -1391,6 +1407,8 @@ function worldToScreen(wx, wy, wz) {
 
 // ── Carousel logic ────────────────────────────────────────────────────────────
 var carouselFrame    = document.getElementById('line-frame');
+var videoBg          = document.getElementById('video-bg');
+var videoBgTimer     = null;
 var carouselSlides   = document.querySelectorAll('.carousel-slide');
 var carouselIndex    = 0;
 var carouselTimer    = null;
@@ -1559,7 +1577,17 @@ function activateProject(key) {
   isVideoMode = (key === 'video');
   if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
-  if (isVideoMode) startVideo(); else stopVideo();
+  if (isVideoMode) {
+    startVideo();
+    clearTimeout(videoBgTimer);
+    videoBg.style.display = 'block';
+    videoBgTimer = setTimeout(function() { videoBg.classList.add('visible'); }, 1100);
+  } else {
+    stopVideo();
+    videoBg.classList.remove('visible');
+    clearTimeout(videoBgTimer);
+    setTimeout(function() { videoBg.style.display = 'none'; }, 650);
+  }
   if (isSphere360) loadSphere360();
   applyShapeConfig(key);
 
@@ -1672,6 +1700,14 @@ function animate() {
   }
   if (isVideoMode) {
     sampleVideoFrame();
+    if (videoBg.classList.contains('visible')) {
+      var bb  = getSwarmBbox();
+      var pad = 8;
+      videoBg.style.left   = (bb.x - pad) + 'px';
+      videoBg.style.top    = (bb.y - pad) + 'px';
+      videoBg.style.width  = (bb.w + pad*2) + 'px';
+      videoBg.style.height = (bb.h + pad*2) + 'px';
+    }
   }
   if (isGhost) {
     updateGhostColors(time);
