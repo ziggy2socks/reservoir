@@ -206,7 +206,7 @@
   <div class="project-item" data-project="ring">Ring Stack</div>
   <div class="project-item" data-project="dna">DNA</div>
   <div class="project-item" data-project="attractor">Attractor</div>
-  <div class="project-item" data-project="text">Text</div>
+
   <div class="project-item" data-project="ghost">Ghost</div>
   <div class="project-item" data-project="splash">Cursor Splash</div>
   <div class="project-item" data-project="led">LED Grid</div>
@@ -245,7 +245,7 @@ var BLACK = new THREE.Color(0x111111);
 // Per-shape config: autoRotate speed (0 = locked still)
 // lockCamera: true = snap to fixed POV and disable all orbit interaction
 var SHAPE_CONFIG = {
-  studio:   { rotate: 0.6 },
+  studio:   { rotate: 0.0 }, // Reservoir text — still, face-on
   bid:      { rotate: 0.4 },
   pulse:    { rotate: 0.0 },
   radar:    { rotate: 0.0 },
@@ -258,7 +258,7 @@ var SHAPE_CONFIG = {
   ring:     { rotate: 0.4 },
   dna:      { rotate: 0.3 },
   attractor:{ rotate: 0.2 },
-  text:     { rotate: 0.0 },
+
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
@@ -407,9 +407,95 @@ function sampleTrianglesUniform(posAttr, indexAttr, matrix, outList, numSamples)
 }
 
 // ── Shape generators ──────────────────────────────────────────────────────────
+// ── Reservoir text — samples one of three PNG logos ──────────────────────
+var RESERVOIR_IMGS = ['/reservoir-a.png', '/reservoir-b.png', '/reservoir-c.png'];
+var reservoirPoints  = [null, null, null]; // cached point arrays per image
+var reservoirLoaded  = [false, false, false];
+var reservoirCurrent = -1; // which one is active
+var reservoirCanvas  = document.createElement('canvas');
+var reservoirCtx     = reservoirCanvas.getContext('2d');
+var reservoirTimer   = null;
+
+function sampleReservoirImage(idx, callback) {
+  if (reservoirLoaded[idx]) { callback(reservoirPoints[idx]); return; }
+  var img = new Image();
+  img.onload = function() {
+    var W = 320, H = Math.round(W * img.height / img.width);
+    reservoirCanvas.width  = W;
+    reservoirCanvas.height = H;
+    reservoirCtx.fillStyle = '#fff';
+    reservoirCtx.fillRect(0, 0, W, H);
+    reservoirCtx.drawImage(img, 0, 0, W, H);
+    var data = reservoirCtx.getImageData(0, 0, W, H).data;
+
+    // Collect dark pixels (text = black on white)
+    var darkPixels = [];
+    for (var py = 0; py < H; py++) {
+      for (var px = 0; px < W; px++) {
+        var di = (py * W + px) * 4;
+        var brightness = (data[di] + data[di+1] + data[di+2]) / 3;
+        if (brightness < 128) darkPixels.push({ px: px, py: py });
+      }
+    }
+
+    // Map pixels to world coords — fit within ~60 wide
+    var worldW = 60, worldH = worldW * H / W;
+    var pts = [];
+    for (var i = 0; i < COUNT; i++) {
+      var p = darkPixels[i % darkPixels.length];
+      pts.push({
+        x:  (p.px / W - 0.5) * worldW + (Math.random()-0.5)*0.4,
+        y: -(p.py / H - 0.5) * worldH + (Math.random()-0.5)*0.4,
+        z:  (Math.random()-0.5)*0.5
+      });
+    }
+
+    reservoirPoints[idx] = pts;
+    reservoirLoaded[idx] = true;
+    callback(pts);
+  };
+  img.onerror = function() { callback(null); };
+  img.src = RESERVOIR_IMGS[idx];
+}
+
+function activateReservoirIdx(idx) {
+  reservoirCurrent = idx;
+  sampleReservoirImage(idx, function(pts) {
+    if (pts && currentProject === 'studio') setTargets(pts, 'studio');
+  });
+}
+
+function startReservoirCycle() {
+  clearInterval(reservoirTimer);
+  // Pick a random starting index
+  var startIdx = Math.floor(Math.random() * 3);
+  activateReservoirIdx(startIdx);
+  // Cycle every 30s through a shuffled order
+  var order = [0, 1, 2].filter(function(i) { return i !== startIdx; });
+  // Shuffle remaining
+  order.sort(function() { return Math.random()-0.5; });
+  order.unshift(startIdx);
+  var step = 0;
+  reservoirTimer = setInterval(function() {
+    if (currentProject !== 'studio') { clearInterval(reservoirTimer); return; }
+    step = (step + 1) % 3;
+    activateReservoirIdx(order[step]);
+  }, 30000);
+}
+
+function stopReservoirCycle() {
+  clearInterval(reservoirTimer);
+  reservoirTimer = null;
+}
+
 function genStudio() {
+  // Returns current reservoir points if loaded, else placeholder sphere while loading
+  if (reservoirCurrent >= 0 && reservoirLoaded[reservoirCurrent]) {
+    return reservoirPoints[reservoirCurrent];
+  }
+  // Placeholder while images load — tight sphere
   var pts = [];
-  for (var i = 0; i < COUNT; i++) pts.push(rndSphere(40));
+  for (var i = 0; i < COUNT; i++) pts.push(rndSphere(8));
   return pts;
 }
 
@@ -1572,6 +1658,7 @@ function activateProject(key) {
   isGhost    = (key === 'ghost');
   isSphere360 = (key === 'sphere360');
   isSplash   = (key === 'splash');
+  if (key === 'studio') startReservoirCycle(); else stopReservoirCycle();
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
@@ -1628,7 +1715,6 @@ function activateProject(key) {
       case 'ring':      pts = genRingStack(); break;
       case 'dna':       pts = genDNA();       break;
       case 'attractor': pts = genAttractor(); break;
-      case 'text':      pts = genText();      break;
       default: pts = genStudio();
     }
     setTargets(pts, key);
@@ -1859,7 +1945,11 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-setTargets(genStudio(), 'studio');
+startReservoirCycle(); // loads + sets targets for Reservoir on boot
+// Preload all three in background so cycles are instant
+setTimeout(function() {
+  [0,1,2].forEach(function(i) { sampleReservoirImage(i, function(){}); });
+}, 500);
 animate();
 
 })();
