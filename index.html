@@ -434,12 +434,27 @@ function sampleTypeImage(idx, callback) {
     try { data = ctx2d.getImageData(0, 0, W, H).data; }
     catch(e) { console.warn('type canvas err', e); callback(null); return; }
 
-    var darkPixels = [];
+    // Build dark pixel map
+    var isDark = new Uint8Array(W * H);
     for (var py = 0; py < H; py++) {
       for (var px = 0; px < W; px++) {
         var di = (py * W + px) * 4;
         var brightness = (data[di] + data[di+1] + data[di+2]) / 3;
-        if (brightness < 160) darkPixels.push({ px: px, py: py });
+        if (brightness < 160) isDark[py * W + px] = 1;
+      }
+    }
+
+    var darkPixels = [];
+    for (var py = 0; py < H; py++) {
+      for (var px = 0; px < W; px++) {
+        if (!isDark[py * W + px]) continue;
+        if (isMobile) {
+          // Mobile: outline only — keep pixel only if at least one neighbour is light
+          var onEdge = !isDark[(py-1)*W+px] || !isDark[(py+1)*W+px] ||
+                       !isDark[py*W+(px-1)] || !isDark[py*W+(px+1)];
+          if (!onEdge) continue;
+        }
+        darkPixels.push({ px: px, py: py });
       }
     }
     if (!darkPixels.length) { callback(null); return; }
@@ -1759,32 +1774,23 @@ function animate() {
       var dy = pos.y - mouse.y;
       var dz = pos.z - mouse.z;
       var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      if (currentProject === 'type') {
-        var splashR = 18;
-        if (dist < splashR && mouseVel > 2) {
-          var force = (splashR - dist) / splashR * mouseVel * 0.08;
-          tgt.x += (dx / (dist + 0.001)) * force;
-          tgt.y += (dy / (dist + 0.001)) * force;
-          tgt.z += (dz / (dist + 0.001)) * force * 0.3; // flatter than sphere splash
-        } else if (typeHome) {
-          // Restore to letterform home position
-          tgt.x = typeHome[i].x;
-          tgt.y = typeHome[i].y;
-          tgt.z = typeHome[i].z;
-        }
+      var splashR = 18;
+      if (dist < splashR && mouseVel > 2) {
+        // Identical flee force for both modes
+        var force = (splashR - dist) / splashR * mouseVel * 0.08;
+        tgt.x += (dx / (dist + 0.001)) * force;
+        tgt.y += (dy / (dist + 0.001)) * force;
+        tgt.z += (dz / (dist + 0.001)) * force * 0.5;
+      } else if (currentProject === 'type' && typeHome) {
+        // Type: restore to letterform
+        tgt.x = typeHome[i].x;
+        tgt.y = typeHome[i].y;
+        tgt.z = typeHome[i].z;
       } else {
-        // Cursor Splash mode — sphere drift
-        var splashR = 18;
-        if (dist < splashR && mouseVel > 2) {
-          var force = (splashR - dist) / splashR * mouseVel * 0.08;
-          tgt.x += (dx / (dist + 0.001)) * force;
-          tgt.y += (dy / (dist + 0.001)) * force;
-          tgt.z += (dz / (dist + 0.001)) * force * 0.5;
-        } else {
-          tgt.x += (-tgt.x) * 0.01;
-          tgt.y += (-tgt.y) * 0.01;
-          tgt.z += (-tgt.z) * 0.01;
-        }
+        // Splash: restore to sphere origin
+        tgt.x += (-tgt.x) * 0.01;
+        tgt.y += (-tgt.y) * 0.01;
+        tgt.z += (-tgt.z) * 0.01;
       }
     }
 
