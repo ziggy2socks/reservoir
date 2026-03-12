@@ -212,7 +212,7 @@
   <div class="project-item" data-project="led">LED Grid</div>
   <div class="project-item" data-project="photo">Photo</div>
   <div class="project-item" data-project="video">Video</div>
-  <div class="project-item" data-project="sphere360">360°</div>
+
 </div>
 
 <script>
@@ -264,7 +264,7 @@ var SHAPE_CONFIG = {
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
   photo:    { rotate: 0.0, lockCamera: true, camPos: null, contentMode: true },
   video:    { rotate: 0.0, lockCamera: true, camPos: null, contentMode: true },
-  sphere360:{ rotate: 0.0 }, // camera goes to center, full orbit freedom
+
 };
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
@@ -419,6 +419,7 @@ var reservoirTimer   = null;
 function sampleReservoirImage(idx, callback) {
   if (reservoirLoaded[idx]) { callback(reservoirPoints[idx]); return; }
   var img = new Image();
+  img.crossOrigin = 'anonymous';
   img.onload = function() {
     var W = 320, H = Math.round(W * img.height / img.width);
     reservoirCanvas.width  = W;
@@ -426,7 +427,9 @@ function sampleReservoirImage(idx, callback) {
     reservoirCtx.fillStyle = '#fff';
     reservoirCtx.fillRect(0, 0, W, H);
     reservoirCtx.drawImage(img, 0, 0, W, H);
-    var data = reservoirCtx.getImageData(0, 0, W, H).data;
+    var data;
+    try { data = reservoirCtx.getImageData(0, 0, W, H).data; }
+    catch(e) { console.warn('reservoir canvas tainted', e); callback(null); return; }
 
     // Collect dark pixels (text = black on white)
     var darkPixels = [];
@@ -1627,14 +1630,7 @@ function activateProject(key) {
   // Immediately kill any overlay before particles start moving
   stopCarousel();
   if (!isVideoMode) stopVideo();
-  // Restore fog, clipping, particle size if leaving 360 mode
-  if (isSphere360 && key !== 'sphere360') {
-    scene.fog = new THREE.FogExp2(0xf4f2ee, 0.008);
-    camera.near = 0.1;
-    camera.far  = 1000;
-    camera.updateProjectionMatrix();
-    particles.material.size = isMobile ? 0.8 : 0.5;
-  }
+
 
   // Datamap = statue only — pre-load, wait for it
   if (key === 'datamap' && !statuePoints && !statueError) {
@@ -1656,7 +1652,6 @@ function activateProject(key) {
   isRadar  = (key === 'radar');
   isWave   = (key === 'wave');
   isGhost    = (key === 'ghost');
-  isSphere360 = (key === 'sphere360');
   isSplash   = (key === 'splash');
   if (key === 'studio') startReservoirCycle(); else stopReservoirCycle();
   isLED    = (key === 'led');
@@ -1665,32 +1660,7 @@ function activateProject(key) {
   if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
   if (isVideoMode) startVideo(); else stopVideo();
-  if (isSphere360) loadSphere360();
   applyShapeConfig(key);
-
-  // 360 mode: camera at center, standard OrbitControls locked to origin
-  if (isSphere360) {
-    controls.dispose();
-    camera.near = 0.01;
-    camera.far  = SPHERE_R * 4;
-    camera.position.set(0, 0, 0.01);
-    camera.updateProjectionMatrix();
-    camera.updateMatrixWorld();
-    scene.fog = null;
-    // Bigger particles so they're visible at sphere surface distance
-    particles.material.size = isMobile ? 1.6 : 1.0;
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping   = true;
-    controls.dampingFactor   = 0.06;
-    controls.autoRotate      = true;
-    controls.autoRotateSpeed = 0.3;
-    controls.enableZoom      = false;
-    controls.enablePan       = false;
-    controls.minDistance     = 0.01;
-    controls.maxDistance     = 0.01;
-    controls.target.set(0, 0, 0);
-    controls.update();
-  }
 
   if (key === 'studio')  randomizeLerpSpeeds(0.04, 0.03);
   else if (key === 'line')    randomizeLerpSpeeds(0.18, 0.10);
@@ -1700,11 +1670,12 @@ function activateProject(key) {
   else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
   else randomizeLerpSpeeds(0.045, 0.06);
 
-  var isAnimated = isRadar || isWave || isGhost || isSplash || isLED || isPhoto || isVideoMode || isSphere360;
-  if (!isAnimated) {
+  var isAnimated = isRadar || isWave || isGhost || isSplash || isLED || isPhoto || isVideoMode;
+  if (key === 'studio') {
+    // startReservoirCycle() already handles setTargets async — don't override with placeholder
+  } else if (!isAnimated) {
     var pts;
     switch (key) {
-      case 'studio':    pts = genStudio();    break;
       case 'bid':       pts = genBid();       break;
       case 'pulse':     pts = genPulse();     break;
       case 'datamap':   pts = genDatamap();   break;
@@ -1720,9 +1691,6 @@ function activateProject(key) {
     setTargets(pts, key);
   } else if (isGhost) {
     setTargets(genGhost(), key);
-  } else if (isSphere360) {
-    setTargets(genSphere360(), key);
-    if (sphereLoaded) for (var si = 0; si < COUNT; si++) targetColors[si].copy(sphereColors[si]);
   } else if (isSplash) {
     setTargets(genStudio(), key);
   } else if (isLED) {
