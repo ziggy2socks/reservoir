@@ -418,6 +418,7 @@ var typeCurrent = -1;
 var typeCanvases = [0,1,2].map(function() { return document.createElement('canvas'); });
 var typeCtxs     = typeCanvases.map(function(c) { return c.getContext('2d'); });
 var typeTimer    = null;
+var typeHome     = null; // cached letterform positions for cursor-restore
 
 function sampleTypeImage(idx, callback) {
   if (typeLoaded[idx]) { callback(typePoints[idx]); return; }
@@ -455,6 +456,8 @@ function sampleTypeImage(idx, callback) {
     }
     typePoints[idx] = pts;
     typeLoaded[idx] = true;
+    // Cache home positions for cursor splash restore
+    typeHome = pts.map(function(p) { return { x: p.x, y: p.y, z: p.z }; });
     callback(pts);
   };
   img.onerror = function() { console.warn('type img failed', TYPE_IMGS[idx]); callback(null); };
@@ -1752,24 +1755,38 @@ function animate() {
 
 
     if (isSplash || currentProject === 'type') {
-      // Particles flee cursor on fast movement
       var dx = pos.x - mouse.x;
       var dy = pos.y - mouse.y;
       var dz = pos.z - mouse.z;
       var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      var splashR = 18;
-      if (dist < splashR && mouseVel > 2) {
-        var force = (splashR - dist) / splashR * mouseVel * 0.08;
-        tgt.x += (dx / (dist + 0.001)) * force;
-        tgt.y += (dy / (dist + 0.001)) * force;
-        tgt.z += (dz / (dist + 0.001)) * force * 0.5;
-      } else if (isSplash) {
-        // Splash: drift back to sphere origin
-        tgt.x += (-tgt.x) * 0.01;
-        tgt.y += (-tgt.y) * 0.01;
-        tgt.z += (-tgt.z) * 0.01;
+      if (currentProject === 'type') {
+        var splashR = 8; // tighter radius for type
+        if (dist < splashR && mouseVel > 3) {
+          // Flee cursor
+          var force = (splashR - dist) / splashR * mouseVel * 0.06;
+          tgt.x += (dx / (dist + 0.001)) * force;
+          tgt.y += (dy / (dist + 0.001)) * force;
+          tgt.z += (dz / (dist + 0.001)) * force * 0.3;
+        } else if (typeHome) {
+          // Restore to letterform home position
+          tgt.x = typeHome[i].x;
+          tgt.y = typeHome[i].y;
+          tgt.z = typeHome[i].z;
+        }
+      } else {
+        // Cursor Splash mode — sphere drift
+        var splashR = 18;
+        if (dist < splashR && mouseVel > 2) {
+          var force = (splashR - dist) / splashR * mouseVel * 0.08;
+          tgt.x += (dx / (dist + 0.001)) * force;
+          tgt.y += (dy / (dist + 0.001)) * force;
+          tgt.z += (dz / (dist + 0.001)) * force * 0.5;
+        } else {
+          tgt.x += (-tgt.x) * 0.01;
+          tgt.y += (-tgt.y) * 0.01;
+          tgt.z += (-tgt.z) * 0.01;
+        }
       }
-      // Type: no drift-back needed — normal lerp returns particles to letterform targets
     }
 
     pos.lerp(tgt, lerpSpeeds[i]);
