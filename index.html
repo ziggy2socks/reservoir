@@ -209,6 +209,7 @@
   <div class="project-item" data-project="attractor">Attractor</div>
 
 
+  <div class="project-item" data-project="ink">Ink</div>
   <div class="project-item" data-project="torus">Torus Knot</div>
   <div class="project-item" data-project="hopf">Hopf</div>
   <div class="project-item" data-project="klein">Klein</div>
@@ -265,6 +266,7 @@ var SHAPE_CONFIG = {
   attractor:{ rotate: 0.2 },
 
   type:     { rotate: 0.0 },
+  ink:      { rotate: 0.0 },
   torus:    { rotate: 0.4 },
   hopf:     { rotate: 0.3 },
   klein:    { rotate: 0.35 },
@@ -1032,6 +1034,79 @@ function genKlein() {
     }
     pts.push({ x: x*0.9, y: y*0.9 - 8, z: z*0.9 });
   }
+  return pts;
+}
+
+// ── Ink — row-normalized PNG sampling ────────────────────────────────────────
+var inkPoints = null, inkLoaded = false;
+
+function loadInk(callback) {
+  if (inkLoaded) { callback(inkPoints); return; }
+  var img = new Image();
+  img.onload = function() {
+    var W = 800, H = Math.round(W * img.height / img.width);
+    var cnv = document.createElement('canvas');
+    cnv.width = W; cnv.height = H;
+    var ctx = cnv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(img, 0, 0, W, H);
+    var data = ctx.getImageData(0, 0, W, H).data;
+
+    // Build per-row dark pixel lists
+    var byRow = [];
+    for (var py = 0; py < H; py++) {
+      var rowPx = [];
+      for (var px = 0; px < W; px++) {
+        var di = (py * W + px) * 4;
+        var b = (data[di] + data[di+1] + data[di+2]) / 3;
+        if (b < 160) {
+          if (isMobile) {
+            // outline only on mobile
+            var di2 = function(dy,dx){ return ((py+dy)*W+(px+dx))*4; };
+            var isEdge = (py>0 && (data[di2(-1,0)]+data[di2(-1,0)+1]+data[di2(-1,0)+2])/3 >= 160) ||
+                         (py<H-1 && (data[di2(1,0)]+data[di2(1,0)+1]+data[di2(1,0)+2])/3 >= 160) ||
+                         (px>0 && (data[di2(0,-1)]+data[di2(0,-1)+1]+data[di2(0,-1)+2])/3 >= 160) ||
+                         (px<W-1 && (data[di2(0,1)]+data[di2(0,1)+1]+data[di2(0,1)+2])/3 >= 160);
+            if (!isEdge) continue;
+          }
+          rowPx.push(px);
+        }
+      }
+      if (rowPx.length) byRow.push({ py: py, pxs: rowPx });
+    }
+
+    // Row-normalized: each row gets equal share of COUNT
+    var worldW = isMobile ? 50 : 90;
+    var worldH = worldW * H / W;
+    var perRow = Math.ceil(COUNT / byRow.length);
+    var pts = [];
+    for (var ri = 0; ri < byRow.length && pts.length < COUNT; ri++) {
+      var row = byRow[ri];
+      var take = Math.min(perRow, COUNT - pts.length);
+      for (var j = 0; j < take; j++) {
+        var px = row.pxs[j % row.pxs.length];
+        pts.push({
+          x:  (px / W - 0.5) * worldW,
+          y: -(row.py / H - 0.5) * worldH,
+          z:  0
+        });
+      }
+    }
+    // Fill any remainder
+    while (pts.length < COUNT) pts.push(pts[pts.length % pts.length]);
+    inkPoints = pts;
+    inkLoaded = true;
+    callback(pts);
+  };
+  img.onerror = function() { console.warn('ink img failed'); callback(null); };
+  img.src = '/ink.png';
+}
+
+function genInk() {
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) pts.push(rndSphere(8));
+  loadInk(function(loaded) { if (loaded && currentProject === 'ink') setTargets(loaded, 'ink'); });
   return pts;
 }
 
@@ -1826,6 +1901,7 @@ function activateProject(key) {
       case 'ring':      pts = genRingStack(); break;
       case 'dna':       pts = genDNA();       break;
       case 'attractor': pts = genAttractor(); break;
+      case 'ink':       pts = genInk();       break;
       case 'torus':     pts = genTorusKnot(); break;
       case 'hopf':      pts = genHopf();      break;
       case 'klein':     pts = genKlein();     break;
