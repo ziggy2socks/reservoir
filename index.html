@@ -435,7 +435,7 @@ function sampleTypeImage(idx, callback) {
   var img = new Image();
   img.onload = function() {
     var cnv = typeCanvases[idx], ctx2d = typeCtxs[idx];
-    var W = 320, H = Math.round(W * img.height / img.width);
+    var W = isMobile ? 800 : 320, H = Math.round(W * img.height / img.width);
     cnv.width = W; cnv.height = H;
     ctx2d.fillStyle = '#fff';
     ctx2d.fillRect(0, 0, W, H);
