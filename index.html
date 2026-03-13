@@ -494,6 +494,23 @@ function activateTypeIdx(idx) {
 }
 
 function startTypeCycle() {
+  // Gently nudge camera back toward z=85 face-on if it has drifted far
+  // Uses a slow lerp so it doesn't snap — preserves continuity
+  var homeZ = 85;
+  if (Math.abs(camera.position.z - homeZ) > 5 || Math.abs(camera.position.x) > 5 || Math.abs(camera.position.y) > 5) {
+    var lerpSteps = 0, maxSteps = 60;
+    (function nudge() {
+      if (currentProject !== 'type' || lerpSteps++ > maxSteps) return;
+      camera.position.x *= 0.9;
+      camera.position.y *= 0.9;
+      camera.position.z += (homeZ - camera.position.z) * 0.1;
+      controls.target.x *= 0.9;
+      controls.target.y *= 0.9;
+      controls.target.z *= 0.9;
+      controls.update();
+      requestAnimationFrame(nudge);
+    })();
+  }
   // Single image — if already loaded use cached points directly, else load
   if (typeLoaded[0] && typePoints[0]) {
     setTargets(typePoints[0], 'type');
