@@ -10,43 +10,80 @@
     body { background: #f4f2ee; overflow: hidden; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
     canvas { display: block; }
 
-    /* ── Desktop: vertical left rail ── */
+    /* ── Unified pill bar (desktop + mobile) ── */
     #ui {
-      position: fixed; top: 50%; left: 48px;
-      transform: translateY(-50%);
-      display: flex; flex-direction: column; gap: 22px;
-      z-index: 10; opacity: 0;
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; flex-direction: row; align-items: center;
+      gap: 6px; z-index: 10; opacity: 0;
       animation: fadeIn 2s ease 0.8s forwards;
+      max-width: calc(100vw - 48px);
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding: 10px 14px;
+      background: rgba(244,242,238,0.72);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 40px;
+      border: 1px solid rgba(0,0,0,0.08);
     }
+    #ui::-webkit-scrollbar { display: none; }
     @keyframes fadeIn { to { opacity: 1; } }
     .project-item {
-      font-size: 10px; letter-spacing: 0.18em;
+      flex-shrink: 0;
+      font-size: 9px; letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: rgba(0,0,0,0.3);
+      color: rgba(0,0,0,0.4);
       cursor: pointer;
-      transition: color 0.3s ease;
+      padding: 6px 13px; border-radius: 20px;
+      border: 1px solid transparent;
+      background: transparent;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
       user-select: none; white-space: nowrap;
     }
-    .project-item:hover, .project-item.active { color: var(--accent, #000); }
+    .project-item:hover { color: rgba(0,0,0,0.7); }
+    .project-item.active {
+      color: #000;
+      border-color: rgba(0,0,0,0.2);
+      background: rgba(0,0,0,0.06);
+    }
 
-    /* ── Mobile: horizontal bottom bar ── */
-    @media (max-width: 640px) {
-      #ui {
-        top: auto; left: 0; bottom: 0;
-        transform: none; flex-direction: row; gap: 0;
-        width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
-        padding: 16px 20px 24px;
-        background: linear-gradient(to top, rgba(244,242,238,0.92) 0%, transparent 100%);
-        scrollbar-width: none;
-      }
-      #ui::-webkit-scrollbar { display: none; }
-      .project-item {
-        flex-shrink: 0; font-size: 9px; letter-spacing: 0.14em;
-        padding: 7px 14px; border-radius: 20px; margin-right: 8px;
-        border: 1px solid rgba(0,0,0,0.15); background: rgba(0,0,0,0.04);
-        transition: color 0.3s, border-color 0.3s, background 0.3s;
-      }
-      .project-item.active { border-color: var(--accent,#000); background: rgba(0,0,0,0.06); }
+    /* ── Experiments panel ── */
+    #exp-panel {
+      position: fixed; bottom: 88px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; gap: 6px;
+      justify-content: center;
+      max-width: min(760px, calc(100vw - 48px));
+      padding: 14px 16px;
+      background: rgba(244,242,238,0.82);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 20px;
+      border: 1px solid rgba(0,0,0,0.08);
+      z-index: 10;
+      opacity: 0; pointer-events: none;
+      transform: translateX(-50%) translateY(8px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    #exp-panel.open {
+      opacity: 1; pointer-events: all;
+      transform: translateX(-50%) translateY(0);
+    }
+    .exp-item {
+      font-size: 9px; letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.4);
+      cursor: pointer;
+      padding: 6px 13px; border-radius: 20px;
+      border: 1px solid rgba(0,0,0,0.1);
+      background: rgba(0,0,0,0.03);
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+      user-select: none; white-space: nowrap;
+    }
+    .exp-item:hover { color: rgba(0,0,0,0.7); }
+    .exp-item.active {
+      color: #000;
+      border-color: rgba(0,0,0,0.2);
+      background: rgba(0,0,0,0.06);
     }
 
     #loading-hint {
@@ -190,35 +227,34 @@
   </div>
 </div>
 
+<!-- Experiments slide-up panel -->
+<div id="exp-panel">
+  <div class="exp-item" data-project="grid">Grid</div>
+  <div class="exp-item" data-project="lattice">Lattice</div>
+  <div class="exp-item" data-project="line">Line</div>
+  <div class="exp-item" data-project="spiral">Spiral</div>
+  <div class="exp-item" data-project="wave">Wave</div>
+  <div class="exp-item" data-project="ring">Ring Stack</div>
+  <div class="exp-item" data-project="dna">DNA</div>
+  <div class="exp-item" data-project="attractor">Attractor</div>
+  <div class="exp-item" data-project="ink">Ink</div>
+  <div class="exp-item" data-project="torus">Torus Knot</div>
+  <div class="exp-item" data-project="hopf">Hopf</div>
+  <div class="exp-item" data-project="klein">Klein</div>
+  <div class="exp-item" data-project="ghost">Ghost</div>
+  <div class="exp-item" data-project="splash">Cursor Splash</div>
+  <div class="exp-item" data-project="led">LED Grid</div>
+  <div class="exp-item" data-project="photo">Photo</div>
+  <div class="exp-item" data-project="video">Video</div>
+</div>
+
 <div id="ui">
-  <div class="project-item active" data-project="type">Type</div>
-  <div class="project-item"        data-project="bid">Bid Discovery</div>
-  <div class="project-item"        data-project="pulse">NYC Permit Pulse</div>
-  <div class="project-item"        data-project="radar">311 Radar</div>
-  <div class="project-item"        data-project="datamap">datamap.nyc ✦</div>
-
-  <div class="project-item section-divider" style="pointer-events:none; opacity:0.15; font-size:8px; letter-spacing:0.3em;">— — —</div>
-
-  <div class="project-item" data-project="grid">Grid</div>
-  <div class="project-item" data-project="lattice">Lattice</div>
-  <div class="project-item" data-project="line">Line</div>
-  <div class="project-item" data-project="spiral">Spiral</div>
-  <div class="project-item" data-project="wave">Wave</div>
-  <div class="project-item" data-project="ring">Ring Stack</div>
-  <div class="project-item" data-project="dna">DNA</div>
-  <div class="project-item" data-project="attractor">Attractor</div>
-
-
-  <div class="project-item" data-project="ink">Ink</div>
-  <div class="project-item" data-project="torus">Torus Knot</div>
-  <div class="project-item" data-project="hopf">Hopf</div>
-  <div class="project-item" data-project="klein">Klein</div>
-  <div class="project-item" data-project="ghost">Ghost</div>
-  <div class="project-item" data-project="splash">Cursor Splash</div>
-  <div class="project-item" data-project="led">LED Grid</div>
-  <div class="project-item" data-project="photo">Photo</div>
-  <div class="project-item" data-project="video">Video</div>
-
+  <div class="project-item active" data-project="type">Reservoir</div>
+  <div class="project-item" data-project="bid">Bid Discovery</div>
+  <div class="project-item" data-project="pulse">NYC Permit Pulse</div>
+  <div class="project-item" data-project="radar">311 Radar</div>
+  <div class="project-item" data-project="datamap">datamap.nyc ✦</div>
+  <div class="project-item" id="exp-toggle">Experiments ↑</div>
 </div>
 
 <script>
@@ -243,6 +279,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
+var EXPERIMENT_KEYS = ['grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
@@ -1853,9 +1890,14 @@ function activateProject(key) {
     currentProject = key;
     isRadar = false; isWave = false;
     applyShapeConfig(key);
-    document.querySelectorAll('.project-item').forEach(function(el) {
+    document.querySelectorAll('.project-item, .exp-item').forEach(function(el) {
       el.classList.toggle('active', el.dataset.project === key);
     });
+    if (EXPERIMENT_KEYS && EXPERIMENT_KEYS.indexOf(key) !== -1) {
+      expToggle.classList.add('active');
+    } else {
+      expToggle.classList.remove('active');
+    }
     loadStatueGLB(function() {
       if (currentProject === 'datamap') setTargets(genDatamap(), 'datamap');
     });
@@ -1926,6 +1968,40 @@ function activateProject(key) {
 
 // Preload statue as soon as scripts are ready (background, non-blocking)
 setTimeout(function() { loadStatueGLB(); }, 1500);
+
+// ── Experiments panel toggle ──────────────────────────────────────────────────
+var expPanel  = document.getElementById('exp-panel');
+var expToggle = document.getElementById('exp-toggle');
+var expOpen   = false;
+expToggle.addEventListener('click', function(e) {
+  e.stopPropagation();
+  expOpen = !expOpen;
+  expPanel.classList.toggle('open', expOpen);
+  expToggle.textContent = expOpen ? 'Experiments ↓' : 'Experiments ↑';
+});
+
+document.querySelectorAll('.exp-item').forEach(function(el) {
+  el.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var proj = el.getAttribute('data-project');
+    expOpen = false;
+    expPanel.classList.remove('open');
+    expToggle.textContent = 'Experiments ↑';
+    document.querySelectorAll('.project-item').forEach(function(p) { p.classList.remove('active'); });
+    document.querySelectorAll('.exp-item').forEach(function(p) { p.classList.remove('active'); });
+    expToggle.classList.add('active');
+    el.classList.add('active');
+    activateProject(proj);
+  });
+});
+
+document.addEventListener('click', function() {
+  if (expOpen) {
+    expOpen = false;
+    expPanel.classList.remove('open');
+    expToggle.textContent = 'Experiments ↑';
+  }
+});
 
 document.querySelectorAll('.project-item').forEach(function(el) {
   if (isMobile) {
