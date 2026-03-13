@@ -466,7 +466,15 @@ function sampleTypeImage(idx, callback) {
     }
     if (!darkPixels.length) { callback(null); return; }
 
-    var worldW = isMobile ? 50 : 99, worldH = worldW * H / W;
+    // Fit word to 80% of the smaller viewport dimension so it never clips
+    var fovRad  = camera.fov * Math.PI / 180;
+    var visH    = 2 * Math.tan(fovRad / 2) * camera.position.z;
+    var visW    = visH * camera.aspect;
+    var imgAspect = W / H;
+    var fitByW  = visW * 0.80;
+    var fitByH  = visH * 0.80 * imgAspect;
+    var worldW  = Math.min(fitByW, fitByH);
+    var worldH  = worldW * H / W;
     var pts = [];
     for (var i = 0; i < COUNT; i++) {
       var p = darkPixels[i % darkPixels.length];
