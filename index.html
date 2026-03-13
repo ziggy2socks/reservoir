@@ -229,6 +229,7 @@
 
 <!-- Experiments slide-up panel -->
 <div id="exp-panel">
+  <div class="exp-item" data-project="globe">Globe</div>
   <div class="exp-item" data-project="grid">Grid</div>
   <div class="exp-item" data-project="lattice">Lattice</div>
   <div class="exp-item" data-project="line">Line</div>
@@ -279,7 +280,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var EXPERIMENT_KEYS = ['grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','ghost','splash','led','photo','video'];
+var EXPERIMENT_KEYS = ['globe','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
@@ -304,6 +305,7 @@ var SHAPE_CONFIG = {
 
   type:     { rotate: 0.0 },
   ink:      { rotate: 0.0 },
+  globe:    { rotate: 0.25 },
   torus:    { rotate: 0.4 },
   hopf:     { rotate: 0.3 },
   klein:    { rotate: 0.35 },
@@ -1147,6 +1149,88 @@ function genInk() {
   return pts;
 }
 
+// ── Globe — equirectangular land mask → sphere surface ───────────────────────
+var globePoints = null, globeLoaded = false;
+
+function loadGlobe(callback) {
+  if (globeLoaded) { callback(globePoints); return; }
+  var img = new Image();
+  img.onload = function() {
+    var W = 512, H = 256; // sample at 512×256 — enough unique positions
+    var cnv = document.createElement('canvas');
+    cnv.width = W; cnv.height = H;
+    var ctx = cnv.getContext('2d');
+    ctx.drawImage(img, 0, 0, W, H);
+    var data = ctx.getImageData(0, 0, W, H).data;
+
+    // Build per-row land pixel lists (dark = land)
+    var byRow = [];
+    for (var py = 0; py < H; py++) {
+      var rowPx = [];
+      for (var px = 0; px < W; px++) {
+        var di = (py * W + px) * 4;
+        var b = (data[di] + data[di+1] + data[di+2]) / 3;
+        var isLand = b < 128;
+        if (isLand) {
+          if (isMobile) {
+            // Coastline only on mobile
+            var neighbors = [[py-1,px],[py+1,px],[py,px-1],[py,px+1]];
+            var onCoast = neighbors.some(function(n) {
+              var r=n[0], c=n[1];
+              if (r<0||r>=H||c<0||c>=W) return true;
+              var d2 = (r*W+c)*4;
+              return (data[d2]+data[d2+1]+data[d2+2])/3 >= 128;
+            });
+            if (!onCoast) continue;
+          }
+          rowPx.push(px);
+        }
+      }
+      if (rowPx.length) byRow.push({ py: py, pxs: rowPx });
+    }
+
+    // Row-normalized: equal particles per row → uniform density across latitudes
+    var R = 22;
+    var perRow = Math.ceil(COUNT / byRow.length);
+    var pts = [];
+    for (var ri = 0; ri < byRow.length && pts.length < COUNT; ri++) {
+      var row = byRow[ri];
+      var take = Math.min(perRow, COUNT - pts.length);
+      for (var j = 0; j < take; j++) {
+        var px2 = row.pxs[j % row.pxs.length];
+        var lon = (px2 / W - 0.5) * Math.PI * 2;
+        var lat = (0.5 - row.py / H) * Math.PI;
+        var cosLat = Math.cos(lat);
+        pts.push({
+          x: R * cosLat * Math.cos(lon),
+          y: R * Math.sin(lat),
+          z: R * cosLat * Math.sin(lon)
+        });
+      }
+    }
+    while (pts.length < COUNT) pts.push(pts[pts.length % pts.length]);
+    globePoints = pts;
+    globeLoaded = true;
+    callback(pts);
+  };
+  img.onerror = function() { console.warn('globe img failed'); callback(null); };
+  img.src = '/globe.jpg';
+}
+
+function genGlobe() {
+  loadGlobe(function(pts) {
+    if (pts && currentProject === 'globe') setTargets(pts, 'globe');
+  });
+  // Return sphere placeholder while loading
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var u = Math.random() * Math.PI * 2;
+    var v = Math.acos(2 * Math.random() - 1);
+    pts.push({ x: 22*Math.sin(v)*Math.cos(u), y: 22*Math.cos(v), z: 22*Math.sin(v)*Math.sin(u) });
+  }
+  return pts;
+}
+
 // ── Torus Knot ────────────────────────────────────────────────────────────────
 function genTorusKnot() {
   // p,q coprime integers define the knot type — (2,3)=trefoil, (3,5)=cinquefoil
@@ -1943,6 +2027,7 @@ function activateProject(key) {
       case 'ring':      pts = genRingStack(); break;
       case 'dna':       pts = genDNA();       break;
       case 'attractor': pts = genAttractor(); break;
+      case 'globe':     pts = genGlobe();     break;
       case 'ink':       pts = genInk();       break;
       case 'torus':     pts = genTorusKnot(); break;
       case 'hopf':      pts = genHopf();      break;
