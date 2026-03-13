@@ -211,7 +211,6 @@
 
   <div class="project-item" data-project="torus">Torus Knot</div>
   <div class="project-item" data-project="hopf">Hopf</div>
-  <div class="project-item" data-project="clifford">Clifford</div>
   <div class="project-item" data-project="klein">Klein</div>
   <div class="project-item" data-project="ghost">Ghost</div>
   <div class="project-item" data-project="splash">Cursor Splash</div>
@@ -268,7 +267,6 @@ var SHAPE_CONFIG = {
   type:     { rotate: 0.0 },
   torus:    { rotate: 0.4 },
   hopf:     { rotate: 0.3 },
-  clifford: { rotate: 0.0 }, // 2D attractor — stays flat, no spin needed
   klein:    { rotate: 0.35 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
   splash:   { rotate: 0.0 },
@@ -1827,7 +1825,6 @@ function activateProject(key) {
       case 'attractor': pts = genAttractor(); break;
       case 'torus':     pts = genTorusKnot(); break;
       case 'hopf':      pts = genHopf();      break;
-      case 'clifford':  pts = genClifford();  break;
       case 'klein':     pts = genKlein();     break;
       case 'type':      pts = genType();      break;
       default: pts = genType();
