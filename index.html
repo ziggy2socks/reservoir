@@ -210,6 +210,9 @@
 
 
   <div class="project-item" data-project="torus">Torus Knot</div>
+  <div class="project-item" data-project="hopf">Hopf</div>
+  <div class="project-item" data-project="clifford">Clifford</div>
+  <div class="project-item" data-project="klein">Klein</div>
   <div class="project-item" data-project="ghost">Ghost</div>
   <div class="project-item" data-project="splash">Cursor Splash</div>
   <div class="project-item" data-project="led">LED Grid</div>
@@ -264,6 +267,9 @@ var SHAPE_CONFIG = {
 
   type:     { rotate: 0.0 },
   torus:    { rotate: 0.4 },
+  hopf:     { rotate: 0.3 },
+  clifford: { rotate: 0.0 }, // 2D attractor — stays flat, no spin needed
+  klein:    { rotate: 0.35 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
@@ -428,7 +434,7 @@ function sampleTypeImage(idx, callback) {
   var img = new Image();
   img.onload = function() {
     var cnv = typeCanvases[idx], ctx2d = typeCtxs[idx];
-    var W = 320, H = Math.round(W * img.height / img.width);
+    var W = 800, H = Math.round(W * img.height / img.width);
     cnv.width = W; cnv.height = H;
     ctx2d.fillStyle = '#fff';
     ctx2d.fillRect(0, 0, W, H);
@@ -951,6 +957,82 @@ window.addEventListener('mousemove', function(e) {
   var dist = -camera.position.z / dir.z;
   mouse.copy(camera.position).addScaledVector(dir, dist);
 });
+
+// ── Hopf Fibration ────────────────────────────────────────────────────────────
+// Projects S³ (4D sphere) fibers onto S² via stereographic projection
+function genHopf() {
+  var pts = [];
+  var fibres = 48; // number of great circles
+  var perFibre = Math.floor(COUNT / fibres);
+  for (var f = 0; f < fibres; f++) {
+    // Base point on S² (2-sphere) — evenly distributed via golden angle
+    var theta = Math.acos(1 - 2*(f+0.5)/fibres);
+    var phi   = Math.PI * (1 + Math.sqrt(5)) * f;
+    var p1 = Math.cos(theta/2);
+    var p2 = Math.sin(theta/2) * Math.cos(phi);
+    var p3 = Math.sin(theta/2) * Math.sin(phi);
+    for (var j = 0; j < perFibre; j++) {
+      var t  = (j / perFibre) * Math.PI * 2;
+      var ct = Math.cos(t), st = Math.sin(t);
+      // Fiber on S³
+      var q0 =  p1*ct - p2*st;
+      var q1 =  p1*st + p2*ct;
+      var q2 =  p3*ct;
+      var q3 =  p3*st;
+      // Stereographic projection S³→R³ (project from north pole)
+      var d  = 1 / (1 - q3 + 0.001);
+      pts.push({ x: q0*d*18, y: q1*d*18, z: q2*d*18 });
+    }
+  }
+  while (pts.length < COUNT) pts.push(pts[pts.length % (fibres * perFibre)]);
+  return pts;
+}
+
+// ── Clifford Attractor ────────────────────────────────────────────────────────
+// 2D strange attractor: xn+1 = sin(a·yn)+c·cos(a·xn), yn+1 = sin(b·xn)+d·cos(b·yn)
+function genClifford() {
+  var a = -1.4, b = 1.6, c = 1.0, d = 0.7; // classic params — butterfly-like
+  var pts = [];
+  var x = 0, y = 0;
+  // Burn-in to reach attractor
+  for (var i = 0; i < 1000; i++) {
+    var nx = Math.sin(a*y) + c*Math.cos(a*x);
+    var ny = Math.sin(b*x) + d*Math.cos(b*y);
+    x = nx; y = ny;
+  }
+  var scale = 16;
+  for (var i = 0; i < COUNT; i++) {
+    var nx = Math.sin(a*y) + c*Math.cos(a*x);
+    var ny = Math.sin(b*x) + d*Math.cos(b*y);
+    x = nx; y = ny;
+    pts.push({ x: x*scale, y: y*scale, z: (Math.random()-0.5)*0.5 });
+  }
+  return pts;
+}
+
+// ── Klein Bottle ──────────────────────────────────────────────────────────────
+// Parametric immersion in R³ (the real Klein bottle self-intersects in 3D)
+function genKlein() {
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var u = (i / COUNT) * Math.PI * 2;
+    var v = Math.random() * Math.PI * 2;
+    var x, y, z;
+    // Figure-8 immersion
+    var r  = 4 * (1 - Math.cos(u) / 2);
+    if (u < Math.PI) {
+      x = 6 * Math.cos(u) * (1 + Math.sin(u)) + r * Math.cos(v + Math.PI);
+      y = 16 * Math.sin(u);
+      z = r * Math.sin(v);
+    } else {
+      x = 6 * Math.cos(u) * (1 + Math.sin(u)) + r * Math.cos(u) * Math.cos(v);
+      y = 16 * Math.sin(u);
+      z = r * Math.sin(v);
+    }
+    pts.push({ x: x*0.9, y: y*0.9 - 8, z: z*0.9 });
+  }
+  return pts;
+}
 
 // ── Torus Knot ────────────────────────────────────────────────────────────────
 function genTorusKnot() {
@@ -1744,6 +1826,9 @@ function activateProject(key) {
       case 'dna':       pts = genDNA();       break;
       case 'attractor': pts = genAttractor(); break;
       case 'torus':     pts = genTorusKnot(); break;
+      case 'hopf':      pts = genHopf();      break;
+      case 'clifford':  pts = genClifford();  break;
+      case 'klein':     pts = genKlein();     break;
       case 'type':      pts = genType();      break;
       default: pts = genType();
     }
