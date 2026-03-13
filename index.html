@@ -426,6 +426,7 @@ var typeCtxs     = typeCanvases.map(function(c) { return c.getContext('2d'); });
 var typeTimer    = null;
 var typeHome     = null; // cached letterform positions for cursor-restore
 var fleeTimers   = new Int16Array(COUNT); // per-particle flee cooldown (frames)
+var nudgingHome  = false; // lerp camera back to face-on (set by startTypeCycle)
 
 function sampleTypeImage(idx, callback) {
   if (typeLoaded[idx]) { callback(typePoints[idx]); return; }
@@ -502,21 +503,8 @@ function activateTypeIdx(idx) {
 }
 
 function startTypeCycle() {
-  // Smoothly return camera to face-on position (preserves morph continuity)
-  var homeZ = 85;
-  var lerpSteps = 0, maxSteps = 90;
-  (function nudge() {
-    if (currentProject !== 'type' || lerpSteps++ > maxSteps) return;
-    var t = 0.08;
-    camera.position.x += (0 - camera.position.x) * t;
-    camera.position.y += (0 - camera.position.y) * t;
-    camera.position.z += (homeZ - camera.position.z) * t;
-    controls.target.x += (0 - controls.target.x) * t;
-    controls.target.y += (0 - controls.target.y) * t;
-    controls.target.z += (0 - controls.target.z) * t;
-    controls.update();
-    requestAnimationFrame(nudge);
-  })();
+  // Set flag — main animate loop will lerp camera home
+  nudgingHome = true;
   // Single image — if already loaded use cached points directly, else load
   if (typeLoaded[0] && typePoints[0]) {
     setTargets(typePoints[0], 'type');
@@ -1990,6 +1978,18 @@ function animate() {
 
   posBuf.needsUpdate = true;
   colorBuf.needsUpdate = true;
+  if (nudgingHome) {
+    var t = 0.07;
+    camera.position.x += (0 - camera.position.x) * t;
+    camera.position.y += (0 - camera.position.y) * t;
+    camera.position.z += (85 - camera.position.z) * t;
+    controls.target.x += (0 - controls.target.x) * t;
+    controls.target.y += (0 - controls.target.y) * t;
+    controls.target.z += (0 - controls.target.z) * t;
+    // Stop when close enough
+    if (Math.abs(camera.position.x) < 0.1 && Math.abs(camera.position.y) < 0.1 &&
+        Math.abs(camera.position.z - 85) < 0.1) nudgingHome = false;
+  }
   controls.update();
   composer.render();
   if (currentProject === 'line') sizeCarousel();
