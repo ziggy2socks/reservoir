@@ -209,6 +209,7 @@
   <div class="project-item" data-project="attractor">Attractor</div>
 
 
+  <div class="project-item" data-project="torus">Torus Knot</div>
   <div class="project-item" data-project="ghost">Ghost</div>
   <div class="project-item" data-project="splash">Cursor Splash</div>
   <div class="project-item" data-project="led">LED Grid</div>
@@ -262,6 +263,7 @@ var SHAPE_CONFIG = {
   attractor:{ rotate: 0.2 },
 
   type:     { rotate: 0.0 },
+  torus:    { rotate: 0.4 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
@@ -461,12 +463,13 @@ function sampleTypeImage(idx, callback) {
     if (!darkPixels.length) { callback(null); return; }
 
     var worldW = isMobile ? 50 : 99, worldH = worldW * H / W;
+    var jitter = isMobile ? (worldW / W * 0.5) : (worldW / W * 0.5); // half-pixel spread
     var pts = [];
     for (var i = 0; i < COUNT; i++) {
       var p = darkPixels[i % darkPixels.length];
       pts.push({
-        x:  (p.px / W - 0.5) * worldW,
-        y: -(p.py / H - 0.5) * worldH,
+        x:  (p.px / W - 0.5) * worldW + (Math.random() - 0.5) * jitter,
+        y: -(p.py / H - 0.5) * worldH + (Math.random() - 0.5) * jitter,
         z:  0
       });
     }
@@ -488,6 +491,20 @@ function activateTypeIdx(idx) {
 }
 
 function startTypeCycle() {
+  // Reset camera to default face-on position
+  controls.dispose();
+  camera.position.set(0, 0, 85);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping  = true;
+  controls.dampingFactor  = 0.06;
+  controls.autoRotate     = false;
+  controls.enablePan      = false;
+  controls.minDistance    = 20;
+  controls.maxDistance    = 150;
+  controls.target.set(0, 0, 0);
+  controls.update();
   // Single image — if already loaded use cached points directly, else load
   if (typeLoaded[0] && typePoints[0]) {
     setTargets(typePoints[0], 'type');
@@ -948,6 +965,30 @@ window.addEventListener('mousemove', function(e) {
   mouse.copy(camera.position).addScaledVector(dir, dist);
 });
 
+// ── Torus Knot ────────────────────────────────────────────────────────────────
+function genTorusKnot() {
+  // p,q coprime integers define the knot type — (2,3)=trefoil, (3,5)=cinquefoil
+  var p = 2, q = 3;
+  var R = 18, r = 7; // major/minor radii
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var t = (i / COUNT) * Math.PI * 2 * p;
+    // Torus knot parametric equations
+    var phi = q / p * t;
+    var x = (R + r * Math.cos(phi)) * Math.cos(t);
+    var y = (R + r * Math.cos(phi)) * Math.sin(t);
+    var z = r * Math.sin(phi);
+    // Tiny scatter so tube has visible thickness
+    var scatter = 0.4;
+    pts.push({
+      x: x + (Math.random()-0.5)*scatter,
+      y: y + (Math.random()-0.5)*scatter,
+      z: z + (Math.random()-0.5)*scatter
+    });
+  }
+  return pts;
+}
+
 // ── Ghost — white field, small dark shape drifting through ────────────────
 var ghostColors = null;
 
@@ -1153,7 +1194,11 @@ function sampleVideoFrame() {
   for (var i = 0; i < COUNT; i++) {
     var ci = i % LED_COLS;
     var ri = Math.floor(i / LED_COLS);
-    if (ri >= LED_ROWS) continue;
+    if (ri >= LED_ROWS) {
+      // Out-of-grid particles: set to bg color so they're invisible
+      videoColors[i].setRGB(0.957, 0.949, 0.933);
+      continue;
+    }
     var px = (ri * LED_COLS + ci) * 4;
     videoColors[i].setRGB(data[px]/255, data[px+1]/255, data[px+2]/255);
   }
@@ -1707,6 +1752,7 @@ function activateProject(key) {
       case 'ring':      pts = genRingStack(); break;
       case 'dna':       pts = genDNA();       break;
       case 'attractor': pts = genAttractor(); break;
+      case 'torus':     pts = genTorusKnot(); break;
       case 'type':      pts = genType();      break;
       default: pts = genType();
     }
