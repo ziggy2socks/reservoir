@@ -471,8 +471,8 @@ function sampleTypeImage(idx, callback) {
     var visH    = 2 * Math.tan(fovRad / 2) * camera.position.z;
     var visW    = visH * camera.aspect;
     var imgAspect = W / H;
-    var fitByW  = visW * 0.80;
-    var fitByH  = visH * 0.80 * imgAspect;
+    var fitByW  = visW * 0.75;
+    var fitByH  = visH * 0.75 * imgAspect;
     var worldW  = Math.min(fitByW, fitByH);
     var worldH  = worldW * H / W;
     var pts = [];
@@ -502,23 +502,21 @@ function activateTypeIdx(idx) {
 }
 
 function startTypeCycle() {
-  // Gently nudge camera back toward z=85 face-on if it has drifted far
-  // Uses a slow lerp so it doesn't snap — preserves continuity
+  // Smoothly return camera to face-on position (preserves morph continuity)
   var homeZ = 85;
-  if (Math.abs(camera.position.z - homeZ) > 5 || Math.abs(camera.position.x) > 5 || Math.abs(camera.position.y) > 5) {
-    var lerpSteps = 0, maxSteps = 60;
-    (function nudge() {
-      if (currentProject !== 'type' || lerpSteps++ > maxSteps) return;
-      camera.position.x *= 0.9;
-      camera.position.y *= 0.9;
-      camera.position.z += (homeZ - camera.position.z) * 0.1;
-      controls.target.x *= 0.9;
-      controls.target.y *= 0.9;
-      controls.target.z *= 0.9;
-      controls.update();
-      requestAnimationFrame(nudge);
-    })();
-  }
+  var lerpSteps = 0, maxSteps = 90;
+  (function nudge() {
+    if (currentProject !== 'type' || lerpSteps++ > maxSteps) return;
+    var t = 0.08;
+    camera.position.x += (0 - camera.position.x) * t;
+    camera.position.y += (0 - camera.position.y) * t;
+    camera.position.z += (homeZ - camera.position.z) * t;
+    controls.target.x += (0 - controls.target.x) * t;
+    controls.target.y += (0 - controls.target.y) * t;
+    controls.target.z += (0 - controls.target.z) * t;
+    controls.update();
+    requestAnimationFrame(nudge);
+  })();
   // Single image — if already loaded use cached points directly, else load
   if (typeLoaded[0] && typePoints[0]) {
     setTargets(typePoints[0], 'type');
