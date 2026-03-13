@@ -933,65 +933,7 @@ renderer.domElement.addEventListener('touchmove', function(e) {
 }, { passive: false });
 window.addEventListener('touchend', function() { sphere360Dragging = false; });
 
-// ── Audio reactive ────────────────────────────────────────────────────────────
-var audioCtx = null, analyser = null, audioData = null, audioLevel = 0;
-var audioActive = false;
 
-function startAudio() {
-  if (audioActive) return;
-  if (!navigator.mediaDevices) return;
-  navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(function(stream) {
-    audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-    analyser  = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    audioData = new Uint8Array(analyser.frequencyBinCount);
-    var src = audioCtx.createMediaStreamSource(stream);
-    src.connect(analyser);
-    audioActive = true;
-  }).catch(function(e) { console.warn('mic denied:', e); });
-}
-
-function stopAudio() {
-  if (audioCtx) { audioCtx.close(); audioCtx = null; }
-  audioActive = false;
-  audioLevel  = 0;
-}
-
-function updateAudioLevel() {
-  if (!audioActive || !analyser) return;
-  analyser.getByteFrequencyData(audioData);
-  var sum = 0;
-  for (var i = 0; i < audioData.length; i++) sum += audioData[i];
-  audioLevel = sum / (audioData.length * 255); // 0..1
-}
-
-// ── Gyroscope (mobile) ────────────────────────────────────────────────────────
-var gyroX = 0, gyroY = 0; // smoothed tilt values
-if (isMobile && window.DeviceOrientationEvent) {
-  // iOS 13+ requires permission
-  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-    // Add a tap-to-enable gyro on first interaction
-    document.addEventListener('touchend', function askGyro() {
-      DeviceOrientationEvent.requestPermission().then(function(state) {
-        if (state === 'granted') enableGyro();
-      }).catch(function(){});
-      document.removeEventListener('touchend', askGyro);
-    }, { once: true });
-  } else {
-    enableGyro();
-  }
-}
-function enableGyro() {
-  window.addEventListener('deviceorientation', function(e) {
-    // gamma = left/right tilt (-90 to 90), beta = front/back tilt (-180 to 180)
-    var targetX = (e.beta  || 0) * 0.003; // subtle — 1° tilt = 0.003 rad scene rotation
-    var targetY = (e.gamma || 0) * 0.003;
-    gyroX += (targetX - gyroX) * 0.08; // smooth
-    gyroY += (targetY - gyroY) * 0.08;
-    mesh.rotation.x = gyroX;
-    mesh.rotation.y = gyroY;
-  });
-}
 
 // ── Mouse tracking ────────────────────────────────────────────────────────────
 var mouse = new THREE.Vector3(0, 0, 0); // world-space cursor position at z=0 plane
@@ -1768,7 +1710,7 @@ function activateProject(key) {
   isWave   = (key === 'wave');
   isGhost    = (key === 'ghost');
   isSplash   = (key === 'splash');
-  if (key === 'type') { startTypeCycle(); startAudio(); } else { stopTypeCycle(); stopAudio(); }
+  if (key === 'type') startTypeCycle(); else stopTypeCycle();
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
@@ -1866,18 +1808,7 @@ function animate() {
   if (isGhost) {
     updateGhostColors(time);
   }
-  updateAudioLevel();
-  if (currentProject === 'type' && audioActive && audioLevel > 0.01 && typeHome) {
-    // Push particles outward from their home position proportional to audio level
-    var pulse = audioLevel * 6; // max 6 world units of push at full volume
-    for (var ai = 0; ai < COUNT; ai++) {
-      if (fleeTimers[ai] > 0) continue; // don't fight flee
-      var h = typeHome[ai];
-      var len = Math.sqrt(h.x*h.x + h.y*h.y) + 0.001;
-      targets[ai].x = h.x + (h.x/len) * pulse * seeds[ai];
-      targets[ai].y = h.y + (h.y/len) * pulse * seeds[ai];
-    }
-  }
+
 
 
   // Mouse velocity for splash
