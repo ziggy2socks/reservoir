@@ -1198,7 +1198,7 @@ function loadGlobe(callback) {
       var take = Math.min(perRow, COUNT - pts.length);
       for (var j = 0; j < take; j++) {
         var px2 = row.pxs[j % row.pxs.length];
-        var lon = (px2 / W - 0.5) * Math.PI * 2;
+        var lon = (0.5 - px2 / W) * Math.PI * 2;
         var lat = (0.5 - row.py / H) * Math.PI;
         var cosLat = Math.cos(lat);
         pts.push({
