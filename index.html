@@ -104,11 +104,11 @@
     }
     #dark-toggle:hover { color: rgba(0,0,0,0.8); }
     body.dark #dark-toggle {
-      background: rgba(13,13,15,0.72);
+      background: rgba(15,14,13,0.72);
       border-color: rgba(255,255,255,0.1);
       color: rgba(212,207,198,0.7);
     }
-    body.dark { background: #0d0d0f; }
+    body.dark { background: #0f0e0d; }
     body.dark #ui {
       background: rgba(13,13,15,0.72);
       border-color: rgba(255,255,255,0.08);
@@ -120,7 +120,7 @@
       background: rgba(255,255,255,0.06);
     }
     body.dark #exp-panel {
-      background: rgba(13,13,15,0.82);
+      background: rgba(15,14,13,0.82);
       border-color: rgba(255,255,255,0.08);
     }
     body.dark .exp-item { color: rgba(212,207,198,0.4); border-color: rgba(255,255,255,0.08); }
@@ -331,7 +331,7 @@ var COLOR_LERP = 0.025;
 
 var BLACK = new THREE.Color(0x111111);
 var isDarkMode = false;
-var DARK_BG    = new THREE.Color(0x0d0d0f);
+var DARK_BG    = new THREE.Color(0x0f0e0d); // warm off-black, not cold
 var DARK_PART  = new THREE.Color(0xd4cfc6);
 var LIGHT_BG   = new THREE.Color(0xf4f2ee);
 var LIGHT_PART = new THREE.Color(0x111111);
@@ -395,7 +395,7 @@ var bloomPass = new THREE.UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
   1.2,  // strength
   0.4,  // radius
-  0.1   // threshold
+  0.0   // threshold — 0 catches all particles
 );
 bloomPass.enabled = false; // off in light mode
 composer.addPass(bloomPass);
@@ -2024,7 +2024,9 @@ function applyShapeConfig(key) {
 }
 
 function activateProject(key) {
-  if (key === currentProject) return;
+  // Allow re-activation of async shapes so cached points get re-applied
+  var asyncShapes = ['globe', 'ink'];
+  if (key === currentProject && asyncShapes.indexOf(key) === -1) return;
 
   // Immediately kill any overlay before particles start moving
   stopCarousel();
@@ -2061,6 +2063,12 @@ function activateProject(key) {
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
+  // Fog ruins video/photo colors — disable it regardless of dark mode
+  if (isPhoto || isVideoMode) {
+    scene.fog = null;
+  } else if (isDarkMode) {
+    scene.fog = new THREE.FogExp2(0x0f0e0d, 0.008);
+  }
   if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
   if (isVideoMode) startVideo(); else stopVideo();
@@ -2125,10 +2133,14 @@ document.getElementById('dark-toggle').addEventListener('click', function() {
 
   if (isDarkMode) {
     renderer.setClearColor(DARK_BG, 1);
-    scene.fog = new THREE.FogExp2(0x0d0d0f, 0.008);
-    if (!isMobile) bloomPass.enabled = true;
+    renderer.toneMapping = THREE.ReinhardToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    if (!isPhoto && !isVideoMode) scene.fog = new THREE.FogExp2(0x0f0e0d, 0.008);
+    bloomPass.enabled = true;
   } else {
     renderer.setClearColor(LIGHT_BG, 1);
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.toneMappingExposure = 1.0;
     scene.fog = null;
     bloomPass.enabled = false;
   }
