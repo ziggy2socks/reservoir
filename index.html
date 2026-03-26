@@ -2357,7 +2357,7 @@ function applyShapeConfig(key) {
 
 function activateProject(key) {
   // Allow re-activation of async shapes so cached points get re-applied
-  var asyncShapes = ['globe', 'ink'];
+  var asyncShapes = ['globe', 'ink', 'humanhood'];
   if (key === currentProject && asyncShapes.indexOf(key) === -1) return;
 
   // Immediately kill any overlay before particles start moving
@@ -2406,7 +2406,11 @@ function activateProject(key) {
   isWave       = (key === 'wave');
   isGhost      = (key === 'ghost');
   isHumanhood  = (key === 'humanhood');
-  if (isHumanhood) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
+  if (isHumanhood) {
+    // Only do reveal if this is the first load; on re-activation go straight to continuous scan
+    if (!headPoints) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
+    else { headRevealDone = true; headScanY = headMinY; headScanDir = 1; }
+  }
   isChrome = (key === 'chrome');
   mesh.visible = !isChrome;
   if (isChrome) { buildSurfaceMesh('chrome'); }
