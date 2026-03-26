@@ -272,7 +272,6 @@
 
 <!-- Experiments slide-up panel -->
 <div id="exp-panel">
-  <div class="exp-item" data-project="globe">Globe</div>
   <div class="exp-item" data-project="grid">Grid</div>
   <div class="exp-item" data-project="lattice">Lattice</div>
   <div class="exp-item" data-project="line">Line</div>
@@ -283,7 +282,6 @@
   <div class="exp-item" data-project="attractor">Attractor</div>
   <div class="exp-item" data-project="ink">Ink</div>
   <div class="exp-item" data-project="torus">Torus Knot</div>
-  <div class="exp-item" data-project="hopf">Hopf</div>
   <div class="exp-item" data-project="klein">Klein</div>
   <div class="exp-item" data-project="chrome">Chrome</div>
   <div class="exp-item" data-project="ghost">Ghost</div>
@@ -298,6 +296,8 @@
 <div id="ui">
   <div class="project-item active" data-project="type">Reservoir</div>
   <div class="project-item" data-project="humanhood">Humanhood</div>
+  <div class="project-item" data-project="canon">Canon</div>
+  <div class="project-item" data-project="soilsync">Soil Sync</div>
   <div class="project-item" data-project="radar">311 Radar</div>
   <div class="project-item" data-project="datamap">datamap.nyc ✦</div>
   <div class="project-item" id="exp-toggle">Experiments ↑</div>
@@ -325,7 +325,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var EXPERIMENT_KEYS = ['globe','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','chrome','ghost','splash','led','photo','video'];
+var EXPERIMENT_KEYS = ['grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','klein','chrome','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
@@ -355,9 +355,9 @@ var SHAPE_CONFIG = {
 
   type:     { rotate: 0.0 },
   ink:      { rotate: 0.0 },
-  globe:    { rotate: 0.25 },
+  soilsync: { rotate: 0.25 },
   torus:    { rotate: 0.4 },
-  hopf:     { rotate: 0.3 },
+  canon:    { rotate: 0.3 },
   klein:    { rotate: 0.35 },
   chrome:   { rotate: 0.3 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
@@ -1376,6 +1376,58 @@ window.addEventListener('mousemove', function(e) {
 
 // ── Hopf Fibration ────────────────────────────────────────────────────────────
 // Projects S³ (4D sphere) fibers onto S² via stereographic projection
+// ── Canon — animated Hopf fibration ──────────────────────────────────────────
+var isCanon = false;
+var canonFiberIdx  = new Int16Array(COUNT);  // which fiber each particle belongs to
+var canonT         = new Float32Array(COUNT); // current t position on fiber
+var canonSpeed     = new Float32Array(COUNT); // t increment per frame
+var canonIsSignal  = new Uint8Array(COUNT);   // 1 = blue signal particle
+var canonFibreData = []; // precomputed {p1,p2,p3} per fiber
+
+var CANON_FIBRES  = 48;
+var SIGNAL_FRAC   = 0.08; // 8% of particles are blue signals
+var SIGNAL_SPEED  = 0.04; // fast — signals race along fibers
+
+function hopfPos(p1, p2, p3, t, scale) {
+  var ct = Math.cos(t), st = Math.sin(t);
+  var q0 =  p1*ct - p2*st;
+  var q1 =  p1*st + p2*ct;
+  var q2 =  p3*ct;
+  var q3 =  p3*st;
+  var d  = 1 / (1 - q3 + 0.001);
+  return { x: q0*d*scale, y: q1*d*scale, z: q2*d*scale };
+}
+
+function genCanon() {
+  canonFibreData = [];
+  var perFibre = Math.floor(COUNT / CANON_FIBRES);
+  var pts = [];
+
+  for (var f = 0; f < CANON_FIBRES; f++) {
+    var theta = Math.acos(1 - 2*(f+0.5)/CANON_FIBRES);
+    var phi   = Math.PI * (1 + Math.sqrt(5)) * f;
+    var p1 = Math.cos(theta/2);
+    var p2 = Math.sin(theta/2) * Math.cos(phi);
+    var p3 = Math.sin(theta/2) * Math.sin(phi);
+    canonFibreData.push({ p1:p1, p2:p2, p3:p3 });
+
+    for (var j = 0; j < perFibre; j++) {
+      var idx = f * perFibre + j;
+      var t0  = (j / perFibre) * Math.PI * 2;
+      canonFiberIdx[idx] = f;
+      canonT[idx]        = t0;
+      canonIsSignal[idx] = (Math.random() < SIGNAL_FRAC) ? 1 : 0;
+      canonSpeed[idx]    = canonIsSignal[idx]
+        ? SIGNAL_SPEED * (0.8 + Math.random() * 0.4)
+        : 0; // static particles don't move
+      var p = hopfPos(p1, p2, p3, t0, 18);
+      pts.push(p);
+    }
+  }
+  while (pts.length < COUNT) pts.push(pts[pts.length % (CANON_FIBRES * perFibre)]);
+  return pts;
+}
+
 function genHopf() {
   var pts = [];
   var fibres = 48; // number of great circles
@@ -1604,7 +1656,7 @@ function genGlobe() {
     placeholder.push({ x: 22*Math.sin(v)*Math.cos(u), y: 22*Math.cos(v), z: 22*Math.sin(v)*Math.sin(u) });
   }
   loadGlobe(function(pts) {
-    if (pts && currentProject === 'globe') setTargets(pts, 'globe');
+    if (pts && currentProject === 'soilsync') setTargets(pts, 'soilsync');
   });
   return placeholder;
 }
@@ -2357,7 +2409,7 @@ function applyShapeConfig(key) {
 
 function activateProject(key) {
   // Allow re-activation of async shapes so cached points get re-applied
-  var asyncShapes = ['globe', 'ink', 'humanhood'];
+  var asyncShapes = ['soilsync', 'ink', 'humanhood'];
   if (key === currentProject && asyncShapes.indexOf(key) === -1) return;
 
   // Immediately kill any overlay before particles start moving
@@ -2406,6 +2458,7 @@ function activateProject(key) {
   isWave       = (key === 'wave');
   isGhost      = (key === 'ghost');
   isHumanhood  = (key === 'humanhood');
+  isCanon      = (key === 'canon');
   if (isHumanhood) {
     // Only do reveal if this is the first load; on re-activation go straight to continuous scan
     if (!headPoints) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
@@ -2455,13 +2508,14 @@ function activateProject(key) {
       case 'ring':      pts = genRingStack(); break;
       case 'dna':       pts = genDNA();       break;
       case 'attractor': pts = genAttractor(); break;
-      case 'globe':     pts = genGlobe();     break;
+      case 'soilsync':  pts = genGlobe();     break;
+      case 'canon':     pts = genCanon();     break;
       case 'web':       pts = genWeb();       break;
       case 'chrome':    pts = genChrome();    break;
       case 'glass':     pts = genGlass();     break;
       case 'ink':       pts = genInk();       break;
       case 'torus':     pts = genTorusKnot(); break;
-      case 'hopf':      pts = genHopf();      break;
+
       case 'klein':     pts = genKlein();     break;
       case 'type':      pts = genType();      break;
       default: pts = genType();
@@ -2672,6 +2726,10 @@ function animate() {
     } else if (isSphere360 && sphereLoaded && sphereColors && sphereColors[i]) {
       colors[i].lerp(sphereColors[i], 0.04);
       targetColors[i].copy(sphereColors[i]);
+    } else if (isCanon && canonIsSignal[i]) {
+      // Signal particle: vivid blue racing along fiber
+      colors[i].setRGB(0.2, 0.5, 1.0);
+      targetColors[i].setRGB(0.2, 0.5, 1.0);
     } else if (isHumanhood && headPoints) {
       var hp   = headPoints[i];
       var bandW = 1.0; // crisp narrow band
@@ -2695,6 +2753,18 @@ function animate() {
     colorArr[i*3]   = colors[i].r;
     colorArr[i*3+1] = colors[i].g;
     colorArr[i*3+2] = colors[i].b;
+  }
+
+  // Canon: advance signal particles along fibers
+  if (isCanon && canonFibreData.length === CANON_FIBRES) {
+    for (var ci = 0; ci < COUNT; ci++) {
+      if (!canonIsSignal[ci]) continue;
+      canonT[ci] += canonSpeed[ci];
+      if (canonT[ci] > Math.PI * 2) canonT[ci] -= Math.PI * 2;
+      var fd = canonFibreData[canonFiberIdx[ci]];
+      var cp = hopfPos(fd.p1, fd.p2, fd.p3, canonT[ci], 18);
+      targets[ci].x = cp.x; targets[ci].y = cp.y; targets[ci].z = cp.z;
+    }
   }
 
   // Web: update proximity lines — use stride to limit to ~2k particles for performance
