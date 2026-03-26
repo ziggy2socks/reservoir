@@ -104,13 +104,13 @@
     }
     #dark-toggle:hover { color: rgba(0,0,0,0.8); }
     body.dark #dark-toggle {
-      background: rgba(15,14,13,0.72);
+      background: rgba(0,0,0,0.72);
       border-color: rgba(255,255,255,0.1);
       color: rgba(212,207,198,0.7);
     }
-    body.dark { background: #0f0e0d; }
+    body.dark { background: #000000; }
     body.dark #ui {
-      background: rgba(13,13,15,0.72);
+      background: rgba(0,0,0,0.72);
       border-color: rgba(255,255,255,0.08);
     }
     body.dark .project-item { color: rgba(212,207,198,0.4); }
@@ -120,7 +120,7 @@
       background: rgba(255,255,255,0.06);
     }
     body.dark #exp-panel {
-      background: rgba(15,14,13,0.82);
+      background: rgba(0,0,0,0.82);
       border-color: rgba(255,255,255,0.08);
     }
     body.dark .exp-item { color: rgba(212,207,198,0.4); border-color: rgba(255,255,255,0.08); }
@@ -296,8 +296,7 @@
 
 <div id="ui">
   <div class="project-item active" data-project="type">Reservoir</div>
-  <div class="project-item" data-project="bid">Bid Discovery</div>
-  <div class="project-item" data-project="pulse">NYC Permit Pulse</div>
+  <div class="project-item" data-project="humanhood">Humanhood</div>
   <div class="project-item" data-project="radar">311 Radar</div>
   <div class="project-item" data-project="datamap">datamap.nyc ✦</div>
   <div class="project-item" id="exp-toggle">Experiments ↑</div>
@@ -331,8 +330,8 @@ var COLOR_LERP = 0.025;
 
 var BLACK = new THREE.Color(0x111111);
 var isDarkMode = false;
-var DARK_BG    = new THREE.Color(0x0f0e0d); // warm off-black, not cold
-var DARK_PART  = new THREE.Color(0xd4cfc6);
+var DARK_BG    = new THREE.Color(0x000000); // pure black
+var DARK_PART  = new THREE.Color(0xffffff); // pure white
 var LIGHT_BG   = new THREE.Color(0xf4f2ee);
 var LIGHT_PART = new THREE.Color(0x111111);
 
@@ -340,7 +339,7 @@ var LIGHT_PART = new THREE.Color(0x111111);
 // lockCamera: true = snap to fixed POV and disable all orbit interaction
 var SHAPE_CONFIG = {
 
-  bid:      { rotate: 0.4 },
+  humanhood: { rotate: 0.25 },
   pulse:    { rotate: 0.0 },
   radar:    { rotate: 0.0 },
   datamap:  { rotate: 0.5 },
@@ -393,9 +392,9 @@ var composer = new THREE.EffectComposer(renderer);
 composer.addPass(new THREE.RenderPass(scene, camera));
 var bloomPass = new THREE.UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  1.2,  // strength
-  0.4,  // radius
-  0.0   // threshold — 0 catches all particles
+  0.4,  // strength
+  0.5,  // radius
+  0.1   // threshold
 );
 bloomPass.enabled = false; // off in light mode
 composer.addPass(bloomPass);
@@ -738,6 +737,154 @@ function loadStatueGLB(callback) {
       statueError = true; statueLoading = false;
     }
   );
+}
+
+// ── Head GLB — contour slice sampler ─────────────────────────────────────────
+var headPoints  = null;
+var headLoading = false;
+var headError   = false;
+
+function loadHeadGLB(callback) {
+  if (headPoints) { if (callback) callback(); return; }
+  if (headLoading) return;
+  headLoading = true;
+  loadingHint.style.display = 'block';
+
+  var loader = new THREE.GLTFLoader();
+  loader.load(
+    'head.glb',
+    function(gltf) {
+      loadingHint.style.display = 'none';
+
+      // Collect all triangles from all meshes
+      var triangles = []; // each: {a,b,c} THREE.Vector3
+
+      var box = new THREE.Box3();
+      gltf.scene.traverse(function(node) {
+        if (!node.isMesh) return;
+        node.updateWorldMatrix(true, false);
+        var pa = node.geometry.attributes.position;
+        if (!pa) return;
+        var v = new THREE.Vector3();
+        for (var i = 0; i < pa.count; i++) {
+          v.fromBufferAttribute(pa, i).applyMatrix4(node.matrixWorld);
+          box.expandByPoint(v);
+        }
+      });
+
+      var center = new THREE.Vector3(); box.getCenter(center);
+      var size   = new THREE.Vector3(); box.getSize(size);
+      var maxDim = Math.max(size.x, size.y, size.z);
+      var scale  = 38 / maxDim; // fit head in ~38 world units tall
+
+      gltf.scene.traverse(function(node) {
+        if (!node.isMesh) return;
+        var geo = node.geometry;
+        if (!geo || !geo.attributes.position) return;
+        node.updateWorldMatrix(true, false);
+
+        var pa  = geo.attributes.position;
+        var idx = geo.index;
+        var triCount = idx ? idx.count / 3 : pa.count / 3;
+
+        for (var t = 0; t < triCount; t++) {
+          var i0 = idx ? idx.getX(t*3)   : t*3;
+          var i1 = idx ? idx.getX(t*3+1) : t*3+1;
+          var i2 = idx ? idx.getX(t*3+2) : t*3+2;
+          var a = new THREE.Vector3().fromBufferAttribute(pa, i0).applyMatrix4(node.matrixWorld);
+          var b = new THREE.Vector3().fromBufferAttribute(pa, i1).applyMatrix4(node.matrixWorld);
+          var c = new THREE.Vector3().fromBufferAttribute(pa, i2).applyMatrix4(node.matrixWorld);
+          // Normalize
+          a.sub(center).multiplyScalar(scale);
+          b.sub(center).multiplyScalar(scale);
+          c.sub(center).multiplyScalar(scale);
+          triangles.push({ a: a, b: b, c: c });
+        }
+      });
+
+      if (triangles.length === 0) {
+        headError = true; headLoading = false; return;
+      }
+
+      // Find Y extents
+      var minY =  Infinity, maxY = -Infinity;
+      for (var ti = 0; ti < triangles.length; ti++) {
+        var tri = triangles[ti];
+        minY = Math.min(minY, tri.a.y, tri.b.y, tri.c.y);
+        maxY = Math.max(maxY, tri.a.y, tri.b.y, tri.c.y);
+      }
+
+      // Contour slicing: 50 evenly spaced Y planes
+      var SLICES = 50;
+      var allContourPts = []; // per slice array of {x,y,z}
+
+      for (var si = 0; si < SLICES; si++) {
+        var yLevel = minY + (si + 0.5) / SLICES * (maxY - minY);
+        var slicePts = [];
+
+        for (var ti = 0; ti < triangles.length; ti++) {
+          var tri = triangles[ti];
+          var verts = [tri.a, tri.b, tri.c];
+          // Find edges that cross yLevel
+          for (var ei = 0; ei < 3; ei++) {
+            var v0 = verts[ei];
+            var v1 = verts[(ei+1)%3];
+            if ((v0.y <= yLevel && v1.y > yLevel) || (v1.y <= yLevel && v0.y > yLevel)) {
+              var t2 = (yLevel - v0.y) / (v1.y - v0.y);
+              slicePts.push({
+                x: v0.x + t2*(v1.x - v0.x),
+                y: yLevel,
+                z: v0.z + t2*(v1.z - v0.z)
+              });
+            }
+          }
+        }
+        if (slicePts.length > 0) allContourPts.push(slicePts);
+      }
+
+      // Distribute COUNT particles proportional to slice point count
+      var totalPts = 0;
+      for (var i = 0; i < allContourPts.length; i++) totalPts += allContourPts[i].length;
+
+      var result = [];
+      for (var i = 0; i < allContourPts.length && result.length < COUNT; i++) {
+        var slice = allContourPts[i];
+        var budget = Math.round(COUNT * slice.length / totalPts);
+        for (var j = 0; j < budget && result.length < COUNT; j++) {
+          result.push(slice[j % slice.length]);
+        }
+      }
+      // Fill remainder
+      while (result.length < COUNT) result.push(result[result.length % result.length]);
+
+      headPoints = result;
+      console.log('Head loaded:', triangles.length, 'tris,', allContourPts.length, 'slices,', result.length, 'pts');
+      headLoading = false;
+      if (callback) callback();
+      if (currentProject === 'humanhood') setTargets(headPoints, 'humanhood');
+    },
+    null,
+    function(err) {
+      console.warn('Head GLB error:', err);
+      loadingHint.style.display = 'none';
+      headError = true; headLoading = false;
+    }
+  );
+}
+
+function genHumanhood() {
+  if (headPoints) return headPoints;
+  // Sphere placeholder while loading
+  loadHeadGLB(function() {
+    if (currentProject === 'humanhood') setTargets(headPoints, 'humanhood');
+  });
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var u = Math.random() * Math.PI * 2;
+    var v = Math.acos(2 * Math.random() - 1);
+    pts.push({ x: 18*Math.sin(v)*Math.cos(u), y: 18*Math.cos(v), z: 18*Math.sin(v)*Math.sin(u) });
+  }
+  return pts;
 }
 
 function genDatamap() {
@@ -2034,6 +2181,21 @@ function activateProject(key) {
 
 
   // Datamap = statue only — pre-load, wait for it
+  if (key === 'humanhood' && !headPoints && !headError) {
+    currentProject = key;
+    isRadar = false; isWave = false;
+    applyShapeConfig(key);
+    document.querySelectorAll('.project-item, .exp-item').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.project === key);
+    });
+    expToggle.classList.remove('active');
+    loadHeadGLB(function() {
+      if (currentProject === 'humanhood') setTargets(headPoints, 'humanhood');
+    });
+    randomizeLerpSpeeds(0.045, 0.06);
+    return;
+  }
+
   if (key === 'datamap' && !statuePoints && !statueError) {
     // Start loading, flip currentProject optimistically so we don't double-trigger
     currentProject = key;
@@ -2067,7 +2229,7 @@ function activateProject(key) {
   if (isPhoto || isVideoMode) {
     scene.fog = null;
   } else if (isDarkMode) {
-    scene.fog = new THREE.FogExp2(0x0f0e0d, 0.008);
+    scene.fog = new THREE.FogExp2(0x000000, 0.008);
   }
   if (isLED || isPhoto || isVideoMode || isGhost) initLED();
   if (isPhoto) loadPhoto(PHOTO_URL);
@@ -2088,7 +2250,7 @@ function activateProject(key) {
   } else if (!isAnimated) {
     var pts;
     switch (key) {
-      case 'bid':       pts = genBid();       break;
+      case 'humanhood': pts = genHumanhood(); break;
       case 'pulse':     pts = genPulse();     break;
       case 'datamap':   pts = genDatamap();   break;
       case 'grid':      pts = genGrid();      break;
@@ -2124,6 +2286,7 @@ function activateProject(key) {
 
 // Preload statue as soon as scripts are ready (background, non-blocking)
 setTimeout(function() { loadStatueGLB(); }, 1500);
+setTimeout(function() { loadHeadGLB(); }, 2000);
 
 // ── Dark mode toggle ─────────────────────────────────────────────────────────
 document.getElementById('dark-toggle').addEventListener('click', function() {
@@ -2133,7 +2296,7 @@ document.getElementById('dark-toggle').addEventListener('click', function() {
 
   if (isDarkMode) {
     renderer.setClearColor(DARK_BG, 1);
-    renderer.toneMapping = THREE.ReinhardToneMapping;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.4;
     if (!isPhoto && !isVideoMode) scene.fog = new THREE.FogExp2(0x0f0e0d, 0.008);
     bloomPass.enabled = true;
