@@ -427,7 +427,7 @@ scene.add(mesh);
 
 // ── Web experiment — proximity lines ─────────────────────────────────────────
 var WEB_NEIGHBORS = 4;      // lines per particle
-var WEB_MAX_DIST  = 8.0;    // max connection distance in world units
+var WEB_MAX_DIST  = 12.0;   // max connection distance in world units
 var isWeb = false;
 var webLineGeo = new THREE.BufferGeometry();
 var webLinePosArr = new Float32Array(COUNT * WEB_NEIGHBORS * 2 * 3); // start+end per line
@@ -1561,12 +1561,20 @@ function genTorusKnot() {
 }
 
 // ── Web / Chrome / Glass ─────────────────────────────────────────────────────
-function genWeb() {
-  // Torus knot as the default shape for web — shows connections beautifully
-  return genTorusKnot();
+function genWebSphere() {
+  // Uniform sphere surface — particles spread out, web connections form naturally
+  var pts = [];
+  for (var i = 0; i < COUNT; i++) {
+    var u = Math.random() * Math.PI * 2;
+    var v = Math.acos(2 * Math.random() - 1);
+    var r = 22;
+    pts.push({ x: r*Math.sin(v)*Math.cos(u), y: r*Math.cos(v), z: r*Math.sin(v)*Math.sin(u) });
+  }
+  return pts;
 }
-function genChrome() { return genTorusKnot(); }
-function genGlass()  { return genTorusKnot(); }
+function genWeb()    { return genWebSphere(); }
+function genChrome() { return genWebSphere(); }
+function genGlass()  { return genWebSphere(); }
 
 // ── Ghost — white field, small dark shape drifting through ────────────────
 var ghostColors = null;
@@ -2594,17 +2602,16 @@ function animate() {
       colors[i].lerp(sphereColors[i], 0.04);
       targetColors[i].copy(sphereColors[i]);
     } else if (isHumanhood && headPoints) {
-      // Scan glow: brighten particles near the scan plane
-      var hp = headPoints[i];
-      var bandW = 2.5;
+      var hp   = headPoints[i];
+      var bandW = 1.0; // crisp narrow band
       var dist  = Math.abs(hp.y - headScanY);
       var glow  = Math.max(0, 1 - dist / bandW);
       var base  = isDarkMode ? DARK_PART : LIGHT_PART;
-      if (glow > 0.01) {
-        var scanColor = new THREE.Color(0.3, 0.6, 1.0); // vivid blue always
-        colors[i].copy(base).lerp(scanColor, glow * 0.7);
+      if (glow > 0.05) {
+        // Set directly to vivid cyan-blue — visible in both modes
+        colors[i].setRGB(0.2 + glow*0.1, 0.5 + glow*0.2, 1.0);
       } else {
-        colors[i].lerp(base, COLOR_LERP);
+        colors[i].copy(base);
       }
       targetColors[i].copy(base);
     } else {
