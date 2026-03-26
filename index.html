@@ -225,7 +225,7 @@
 
 <div id="err"></div>
 <div id="loading-hint">Loading…</div>
-<div id="debug-hint">D = debug</div>
+<div id="debug-hint" style="display:none">D = debug</div>
 <div id="debug">
   <div id="debug-h"></div>
   <div id="debug-v"></div>
@@ -299,7 +299,7 @@
   <div class="project-item" data-project="canon">Canon</div>
   <div class="project-item" data-project="soilsync">Soil Sync</div>
   <div class="project-item" data-project="radar">311 Radar</div>
-  <div class="project-item" data-project="datamap">datamap.nyc ✦</div>
+  <div class="project-item" data-project="datamap">datamap.nyc</div>
   <div class="project-item" id="exp-toggle">Experiments ↑</div>
 </div>
 
@@ -342,7 +342,7 @@ var SHAPE_CONFIG = {
 
   humanhood: { rotate: 0.25 },
   pulse:    { rotate: 0.0 },
-  radar:    { rotate: 0.0 },
+  radar:    { rotate: 0.2 },
   datamap:  { rotate: 0.5 },
   grid:     { rotate: 0.0, lockCamera: true, camPos: null },  // camPos computed dynamically
   lattice:  { rotate: 0.5 },
@@ -902,6 +902,8 @@ var headScanDir    = 1;   // 1 = up, -1 = down
 var headScanSpeed  = 8;   // world units per second
 var headRevealDone = false;
 var isHumanhood    = false;
+var ATMOS_COUNT    = Math.floor(COUNT * 0.05); // ~5% atmosphere particles
+var atmosTimer     = 0; // countdown to reassign atmosphere targets
 
 function loadHeadGLB(callback) {
   if (headPoints) { if (callback) callback(); return; }
@@ -2458,9 +2460,13 @@ function activateProject(key) {
   isHumanhood  = (key === 'humanhood');
   isCanon      = (key === 'canon');
   if (isHumanhood) {
-    // Only do reveal if this is the first load; on re-activation go straight to continuous scan
     if (!headPoints) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
     else { headRevealDone = true; headScanY = headMinY; headScanDir = 1; }
+    // Give atmosphere particles very slow lerp so they drift gently
+    for (var ai = COUNT - ATMOS_COUNT; ai < COUNT; ai++) {
+      lerpSpeeds[ai] = 0.005 + Math.random() * 0.008;
+    }
+    atmosTimer = 0; // trigger immediate first assignment
   }
   isChrome = (key === 'chrome');
   mesh.visible = !isChrome;
@@ -2693,7 +2699,9 @@ function animate() {
     }
 
     // Humanhood: reveal + scan plane
-    if (isHumanhood && headPoints) {
+    if (isHumanhood && headPoints && i >= COUNT - ATMOS_COUNT) {
+      // Atmosphere particle — target already set lazily, just lerp
+    } else if (isHumanhood && headPoints) {
       var hp = headPoints[i];
       if (!headRevealDone) {
         // Reveal phase: particles below scan plane lerp to head, above stay at sphere placeholder
@@ -2839,6 +2847,23 @@ function animate() {
     }
   } else {
     mat.opacity = 1;
+  }
+
+  // Humanhood atmosphere: lazily reassign drift targets
+  if (isHumanhood) {
+    atmosTimer--;
+    if (atmosTimer <= 0) {
+      atmosTimer = 90 + Math.floor(Math.random() * 60); // every 1.5–2.5s
+      var atmosR = 28; // loose shell around head (head is ~38 units tall, shell at 28)
+      for (var ai = COUNT - ATMOS_COUNT; ai < COUNT; ai++) {
+        var u = Math.random() * Math.PI * 2;
+        var v = Math.acos(2 * Math.random() - 1);
+        var r = atmosR * (0.7 + Math.random() * 0.6);
+        targets[ai].x = r * Math.sin(v) * Math.cos(u);
+        targets[ai].y = r * Math.cos(v) * 0.7; // slightly flattened vertically
+        targets[ai].z = r * Math.sin(v) * Math.sin(u);
+      }
+    }
   }
 
   // Advance head scan plane
