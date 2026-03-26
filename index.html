@@ -285,9 +285,7 @@
   <div class="exp-item" data-project="torus">Torus Knot</div>
   <div class="exp-item" data-project="hopf">Hopf</div>
   <div class="exp-item" data-project="klein">Klein</div>
-  <div class="exp-item" data-project="web">Web</div>
   <div class="exp-item" data-project="chrome">Chrome</div>
-  <div class="exp-item" data-project="glass">Glass</div>
   <div class="exp-item" data-project="ghost">Ghost</div>
   <div class="exp-item" data-project="splash">Cursor Splash</div>
   <div class="exp-item" data-project="led">LED Grid</div>
@@ -327,7 +325,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var EXPERIMENT_KEYS = ['globe','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','web','chrome','glass','ghost','splash','led','photo','video'];
+var EXPERIMENT_KEYS = ['globe','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','chrome','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
@@ -361,9 +359,7 @@ var SHAPE_CONFIG = {
   torus:    { rotate: 0.4 },
   hopf:     { rotate: 0.3 },
   klein:    { rotate: 0.35 },
-  web:      { rotate: 0.3 },
   chrome:   { rotate: 0.3 },
-  glass:    { rotate: 0.3 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
@@ -473,7 +469,8 @@ var surfaceBasePos = null; // original vertex positions for displacement
 function buildSurfaceMesh(matType) {
   if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; }
 
-  var geo = new THREE.IcosahedronGeometry(22, 4);
+  var detail = isMobile ? 36 : 56; // matches particle counts: mobile~12960, desktop~31362
+  var geo = new THREE.IcosahedronGeometry(22, detail);
   // Cache original positions for blob displacement
   var origPos = geo.attributes.position.array;
   surfaceBasePos = new Float32Array(origPos.length);
@@ -2339,16 +2336,10 @@ function activateProject(key) {
   isGhost      = (key === 'ghost');
   isHumanhood  = (key === 'humanhood');
   if (isHumanhood) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
-  isWeb    = (key === 'web');
   isChrome = (key === 'chrome');
-  isGlass  = (key === 'glass');
-  webLineMesh.visible = isWeb;
-  webLineMat.color.set(isDarkMode ? 0x8899cc : 0x111111);
-  if (isChrome) buildSurfaceMesh('chrome');
-  if (isGlass)  buildSurfaceMesh('glass');
-  if (!isChrome && !isGlass && surfaceMesh) {
-    scene.remove(surfaceMesh); surfaceMesh = null; surfaceOpacity = 0;
-  }
+  mesh.visible = !isChrome;
+  if (isChrome) { buildSurfaceMesh('chrome'); }
+  else { mesh.visible = true; if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; } mat.opacity = 1; }
   isSplash   = (key === 'splash');
   if (key === 'type') startTypeCycle(); else stopTypeCycle();
   isLED    = (key === 'led');
@@ -2654,14 +2645,10 @@ function animate() {
     webLineBuf.needsUpdate = true;
   }
 
-  // Chrome/Glass: fade surface mesh in as particles converge, fade out on exit
-  if ((isChrome || isGlass) && surfaceMesh) {
-    surfaceOpacity = Math.min(1, surfaceOpacity + 0.008); // ~4s fade in
+  // Chrome: standalone blob — no particles, just the mesh
+  if (isChrome && surfaceMesh) {
     surfaceMesh.visible = true;
-    surfaceMesh.material.opacity = isChrome ? surfaceOpacity : Math.min(0.15, surfaceOpacity * 0.15);
-    mat.opacity = Math.max(0, 1 - surfaceOpacity * 0.9); // particles fade out
-    // Scale surface mesh to roughly match swarm size
-    var swarmR = WEB_MAX_DIST; // approx
+    surfaceMesh.material.opacity = 1;
     // Flubber blob: displace vertices with layered sine noise
     if (surfaceBasePos) {
       var t2 = Date.now() * 0.001;
@@ -2680,7 +2667,6 @@ function animate() {
       surfaceMesh.geometry.computeVertexNormals();
     }
   } else {
-    surfaceOpacity = 0;
     mat.opacity = 1;
   }
 
