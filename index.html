@@ -938,7 +938,7 @@ function loadHeadGLB(callback) {
       var maxDim = Math.max(size.x, size.y, size.z);
       var scale  = 38 / maxDim; // fit head in ~38 world units tall
       // Head is sideways in model space (X=depth, Z=width) — rotate 90° around Y
-      var headRot = new THREE.Matrix4().makeRotationY(Math.PI / 2);
+      var headRot = new THREE.Matrix4().makeRotationY(Math.PI); // 180° — face toward camera
 
       gltf.scene.traverse(function(node) {
         if (!node.isMesh) return;
@@ -2554,7 +2554,7 @@ function activateProject(key) {
 
 // Preload statue as soon as scripts are ready (background, non-blocking)
 setTimeout(function() { loadStatueGLB(); }, 1500);
-setTimeout(function() { loadHeadGLB(); }, 2000);
+// Head loads on demand only (no preload — ensures callback runs while isHumanhood=true)
 
 // ── Dark mode toggle ─────────────────────────────────────────────────────────
 document.getElementById('dark-toggle').addEventListener('click', function() {
@@ -2762,13 +2762,14 @@ function animate() {
       } // end fib % 3 === 0
     } else if (isHumanhood && headPoints) {
       var hp   = headPoints[i];
-      var bandW = 2.0; // wider band — more visible
       var dist  = Math.abs(hp.y - headScanY);
-      var glow  = Math.max(0, 1 - dist / bandW);
       var base  = isDarkMode ? DARK_PART : LIGHT_PART;
-      if (glow > 0.05) {
-        // Set directly to vivid cyan-blue — visible in both modes
-        colors[i].setRGB(0.2 + glow*0.1, 0.5 + glow*0.2, 1.0);
+      if (dist < 0.2) {
+        colors[i].setRGB(0.15, 0.55, 1.0);       // center — vivid bright blue
+      } else if (dist < 0.5) {
+        colors[i].setRGB(0.08, 0.28, 0.72);       // inner edge — mid blue
+      } else if (dist < 0.8) {
+        colors[i].setRGB(0.04, 0.12, 0.42);       // outer edge — dim blue
       } else {
         colors[i].copy(base);
       }
