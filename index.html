@@ -1385,7 +1385,7 @@ var canonPulseT     = new Float32Array(48); // current pulse position per fiber 
 var canonPulseSpeed = new Float32Array(48); // advance speed per fiber
 
 var CANON_FIBRES  = 48;
-var PULSE_WINDOW  = 0.18; // angular window that lights up (radians) — half as many blue particles
+var PULSE_WINDOW  = 0.06; // very narrow pulse — just a few particles per fiber
 var PULSE_SPEED   = 0.05; // how fast pulse travels along fiber
 
 function hopfPos(p1, p2, p3, t, scale) {
@@ -2727,6 +2727,7 @@ function animate() {
       targetColors[i].copy(sphereColors[i]);
     } else if (isCanon && canonFibreData.length === CANON_FIBRES) {
       var fib  = canonFiberIdx[i];
+      if (fib % 3 !== 0) { colors[i].lerp(isDarkMode ? DARK_PART : LIGHT_PART, COLOR_LERP); targetColors[i].copy(isDarkMode ? DARK_PART : LIGHT_PART); } else {
       var tDiff = Math.abs(canonT[i] - canonPulseT[fib]);
       // Wrap angular distance
       if (tDiff > Math.PI) tDiff = Math.PI * 2 - tDiff;
@@ -2737,6 +2738,7 @@ function animate() {
         colors[i].lerp(isDarkMode ? DARK_PART : LIGHT_PART, COLOR_LERP);
       }
       targetColors[i].copy(isDarkMode ? DARK_PART : LIGHT_PART);
+      } // end fib % 3 === 0
     } else if (isHumanhood && headPoints) {
       var hp   = headPoints[i];
       var bandW = 1.0; // crisp narrow band
