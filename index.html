@@ -88,7 +88,7 @@
 
     /* ── Dark mode toggle ── */
     #dark-toggle {
-      position: fixed; top: 20px; left: 20px;
+      position: fixed; top: 20px; right: 20px;
       z-index: 20;
       background: rgba(244,242,238,0.72);
       backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -2486,7 +2486,7 @@ setTimeout(function() { loadHeadGLB(); }, 2000);
 document.getElementById('dark-toggle').addEventListener('click', function() {
   isDarkMode = !isDarkMode;
   document.body.classList.toggle('dark', isDarkMode);
-  this.textContent = isDarkMode ? '☀' : '☽';
+  this.textContent = isDarkMode ? '○' : '☽';
 
   if (isDarkMode) {
     renderer.setClearColor(DARK_BG, 1);
