@@ -899,7 +899,7 @@ var headMinY       = -19; // approx chin
 var headMaxY       =  19; // approx crown
 var headScanY      = -19; // current scan plane Y
 var headScanDir    = 1;   // 1 = up, -1 = down
-var headScanSpeed  = 8;   // world units per second
+var headScanSpeed  = 4;   // world units per second — slower, more visible
 var headRevealDone = false;
 var isHumanhood    = false;
 var ATMOS_COUNT    = Math.floor(COUNT * 0.01); // ~1% atmosphere particles
@@ -2505,6 +2505,7 @@ function activateProject(key) {
   else if (key === 'lattice') randomizeLerpSpeeds(0.055, 0.06);
   else if (key === 'wave')    randomizeLerpSpeeds(0.12, 0.04);
   else if (key === 'text')    randomizeLerpSpeeds(0.06, 0.05);
+  else if (key === 'humanhood') randomizeLerpSpeeds(0.045, 0.06);
   else randomizeLerpSpeeds(0.045, 0.06);
 
   var isAnimated = isRadar || isWave || isGhost || isSplash || isLED || isPhoto || isVideoMode;
@@ -2753,7 +2754,7 @@ function animate() {
       if (tDiff > Math.PI) tDiff = Math.PI * 2 - tDiff;
       var pulse = Math.max(0, 1 - tDiff / PULSE_WINDOW);
       if (pulse > 0.01) {
-        colors[i].setRGB(0.2 + pulse*0.1, 0.5 + pulse*0.15, 1.0);
+        colors[i].setRGB(0.1, 0.4 + pulse*0.2, 1.0);
       } else {
         colors[i].lerp(isDarkMode ? DARK_PART : LIGHT_PART, COLOR_LERP);
       }
@@ -2761,7 +2762,7 @@ function animate() {
       } // end fib % 3 === 0
     } else if (isHumanhood && headPoints) {
       var hp   = headPoints[i];
-      var bandW = 1.0; // crisp narrow band
+      var bandW = 2.0; // wider band — more visible
       var dist  = Math.abs(hp.y - headScanY);
       var glow  = Math.max(0, 1 - dist / bandW);
       var base  = isDarkMode ? DARK_PART : LIGHT_PART;
