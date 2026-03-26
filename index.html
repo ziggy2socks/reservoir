@@ -1032,7 +1032,17 @@ function loadHeadGLB(callback) {
       console.log('Head loaded:', triangles.length, 'tris,', allContourPts.length, 'slices,', result.length, 'pts', 'Y:', headMinY.toFixed(1), '-', headMaxY.toFixed(1));
       headLoading = false;
       if (callback) callback();
-      if (currentProject === 'humanhood') setTargets(headPoints, 'humanhood');
+      if (currentProject === 'humanhood') {
+        setTargets(headPoints, 'humanhood');
+        // Initialize scan + atmosphere now that headPoints is ready
+        headRevealDone = false;
+        headScanY = headMinY;
+        headScanDir = 1;
+        var aStride2 = Math.floor(COUNT / ATMOS_COUNT);
+        for (var ai2 = aStride2 - 1; ai2 < COUNT; ai2 += aStride2) {
+          lerpSpeeds[ai2] = 0.002 + Math.random() * 0.003;
+        }
+      }
     },
     null,
     function(err) {
