@@ -446,26 +446,26 @@ var surfaceMesh = null; // THREE.Mesh, created on demand
 var surfaceOpacity = 0; // 0=invisible, 1=fully visible
 var pointsOpacity  = 1; // inverse of surface opacity during transition
 
-// Create a reusable envMap for reflections (simple procedural)
-var pmremGenerator = null; // init lazily
+// Environment map from equirectangular JPEG
+var envMapTexture = null;
+var pmremGenerator = null;
 
 function getEnvMap() {
-  if (!pmremGenerator && THREE.PMREMGenerator) {
+  if (envMapTexture) return envMapTexture;
+  if (!pmremGenerator) {
     pmremGenerator = new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
   }
-  // Simple room environment — warm light above, cool below
-  var envScene = new THREE.Scene();
-  envScene.background = new THREE.Color(0xffffff);
-  var light1 = new THREE.DirectionalLight(0xfff4e0, 3);
-  light1.position.set(1, 2, 1);
-  envScene.add(light1);
-  var light2 = new THREE.DirectionalLight(0xc0d8ff, 1.5);
-  light2.position.set(-1, -1, -1);
-  envScene.add(light2);
-  envScene.add(new THREE.AmbientLight(0xffffff, 0.5));
-  if (pmremGenerator) return pmremGenerator.fromScene(envScene).texture;
-  return null;
+  var tex = new THREE.TextureLoader().load('/env.jpg', function(t) {
+    t.mapping = THREE.EquirectangularReflectionMapping;
+    var envRT = pmremGenerator.fromEquirectangular(t);
+    envMapTexture = envRT.texture;
+    t.dispose();
+    // Update any existing surface mesh materials
+    if (surfaceMesh) surfaceMesh.material.envMap = envMapTexture;
+  });
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  return tex; // temp until PMREM is ready
 }
 
 function buildSurfaceMesh(matType) {
