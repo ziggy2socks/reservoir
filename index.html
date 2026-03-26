@@ -783,6 +783,8 @@ function loadHeadGLB(callback) {
       var size   = new THREE.Vector3(); box.getSize(size);
       var maxDim = Math.max(size.x, size.y, size.z);
       var scale  = 38 / maxDim; // fit head in ~38 world units tall
+      // Head is sideways in model space (X=depth, Z=width) — rotate 90° around Y
+      var headRot = new THREE.Matrix4().makeRotationY(Math.PI / 2);
 
       gltf.scene.traverse(function(node) {
         if (!node.isMesh) return;
@@ -801,10 +803,10 @@ function loadHeadGLB(callback) {
           var a = new THREE.Vector3().fromBufferAttribute(pa, i0).applyMatrix4(node.matrixWorld);
           var b = new THREE.Vector3().fromBufferAttribute(pa, i1).applyMatrix4(node.matrixWorld);
           var c = new THREE.Vector3().fromBufferAttribute(pa, i2).applyMatrix4(node.matrixWorld);
-          // Normalize
-          a.sub(center).multiplyScalar(scale);
-          b.sub(center).multiplyScalar(scale);
-          c.sub(center).multiplyScalar(scale);
+          // Normalize: center + scale + rotate to face camera
+          a.sub(center).multiplyScalar(scale).applyMatrix4(headRot);
+          b.sub(center).multiplyScalar(scale).applyMatrix4(headRot);
+          c.sub(center).multiplyScalar(scale).applyMatrix4(headRot);
           triangles.push({ a: a, b: b, c: c });
         }
       });
@@ -863,12 +865,6 @@ function loadHeadGLB(callback) {
       }
       // Fill remainder
       while (result.length < COUNT) result.push(result[result.length % result.length]);
-
-      // Flip face toward camera (rotate 180° around Y — negate X and Z)
-      for (var i = 0; i < result.length; i++) {
-        result[i].x = -result[i].x;
-        result[i].z = -result[i].z;
-      }
 
       // Record actual Y range for scan
       headMinY = Infinity; headMaxY = -Infinity;
