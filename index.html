@@ -468,12 +468,17 @@ function getEnvMap() {
   return tex; // temp until PMREM is ready
 }
 
+var surfaceBasePos = null; // original vertex positions for displacement
+
 function buildSurfaceMesh(matType) {
   if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; }
 
-  // Build geometry from current particle positions (convex-hull-ish via simple sphere proxy for now)
-  // Use an IcosahedronGeometry sized to match current swarm — morphed via displacement
   var geo = new THREE.IcosahedronGeometry(22, 4);
+  // Cache original positions for blob displacement
+  var origPos = geo.attributes.position.array;
+  surfaceBasePos = new Float32Array(origPos.length);
+  for (var i = 0; i < origPos.length; i++) surfaceBasePos[i] = origPos[i];
+  geo.attributes.position.setUsage(THREE.DynamicDrawUsage);
 
   var mat;
   if (matType === 'chrome') {
@@ -2657,7 +2662,23 @@ function animate() {
     mat.opacity = Math.max(0, 1 - surfaceOpacity * 0.9); // particles fade out
     // Scale surface mesh to roughly match swarm size
     var swarmR = WEB_MAX_DIST; // approx
-    surfaceMesh.scale.setScalar(1 + Math.sin(Date.now() * 0.0005) * 0.02); // subtle breathe
+    // Flubber blob: displace vertices with layered sine noise
+    if (surfaceBasePos) {
+      var t2 = Date.now() * 0.001;
+      var posAttr = surfaceMesh.geometry.attributes.position;
+      for (var vi = 0; vi < posAttr.count; vi++) {
+        var bx = surfaceBasePos[vi*3],   by = surfaceBasePos[vi*3+1], bz = surfaceBasePos[vi*3+2];
+        var len = Math.sqrt(bx*bx + by*by + bz*bz);
+        var nx = bx/len, ny = by/len, nz = bz/len; // surface normal direction
+        // Layered displacement: slow large wave + fast small ripple
+        var disp = Math.sin(nx*3.1 + t2*0.7) * Math.cos(ny*2.8 + t2*0.5) * 2.8
+                 + Math.sin(nz*5.2 + t2*1.3) * Math.cos(nx*4.1 + t2*0.9) * 1.4
+                 + Math.sin(ny*7.0 + t2*2.1) * 0.6;
+        posAttr.setXYZ(vi, bx + nx*disp, by + ny*disp, bz + nz*disp);
+      }
+      posAttr.needsUpdate = true;
+      surfaceMesh.geometry.computeVertexNormals();
+    }
   } else {
     surfaceOpacity = 0;
     mat.opacity = 1;
