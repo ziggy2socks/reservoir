@@ -332,7 +332,7 @@ var COLOR_LERP = 0.025;
 var BLACK = new THREE.Color(0x111111);
 var isDarkMode = false;
 var DARK_BG    = new THREE.Color(0x000000); // pure black
-var DARK_PART  = new THREE.Color(0xffffff); // pure white
+var DARK_PART  = new THREE.Color(0xbbbbbb); // dimmer white — gives bloom room to stay blue
 var LIGHT_BG   = new THREE.Color(0xf4f2ee);
 var LIGHT_PART = new THREE.Color(0x111111);
 
@@ -1385,7 +1385,7 @@ var canonPulseT     = new Float32Array(48); // current pulse position per fiber 
 var canonPulseSpeed = new Float32Array(48); // advance speed per fiber
 
 var CANON_FIBRES  = 48;
-var PULSE_WINDOW  = 0.35; // angular window that lights up (radians)
+var PULSE_WINDOW  = 0.18; // angular window that lights up (radians) — half as many blue particles
 var PULSE_SPEED   = 0.05; // how fast pulse travels along fiber
 
 function hopfPos(p1, p2, p3, t, scale) {
@@ -2549,6 +2549,7 @@ document.getElementById('dark-toggle').addEventListener('click', function() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.4;
     if (!isPhoto && !isVideoMode) scene.fog = new THREE.FogExp2(0x0f0e0d, 0.008);
+    bloomPass.strength = 0.5;
     bloomPass.enabled = true;
   } else {
     renderer.setClearColor(LIGHT_BG, 1);
