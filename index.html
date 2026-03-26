@@ -285,6 +285,9 @@
   <div class="exp-item" data-project="torus">Torus Knot</div>
   <div class="exp-item" data-project="hopf">Hopf</div>
   <div class="exp-item" data-project="klein">Klein</div>
+  <div class="exp-item" data-project="web">Web</div>
+  <div class="exp-item" data-project="chrome">Chrome</div>
+  <div class="exp-item" data-project="glass">Glass</div>
   <div class="exp-item" data-project="ghost">Ghost</div>
   <div class="exp-item" data-project="splash">Cursor Splash</div>
   <div class="exp-item" data-project="led">LED Grid</div>
@@ -324,7 +327,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var EXPERIMENT_KEYS = ['globe','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','ghost','splash','led','photo','video'];
+var EXPERIMENT_KEYS = ['globe','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','hopf','klein','web','chrome','glass','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
@@ -358,6 +361,9 @@ var SHAPE_CONFIG = {
   torus:    { rotate: 0.4 },
   hopf:     { rotate: 0.3 },
   klein:    { rotate: 0.35 },
+  web:      { rotate: 0.3 },
+  chrome:   { rotate: 0.3 },
+  glass:    { rotate: 0.3 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
   splash:   { rotate: 0.0 },
   led:      { rotate: 0.0, lockCamera: true, camPos: null },
@@ -403,7 +409,9 @@ composer.addPass(bloomPass);
 var mat = new THREE.PointsMaterial({
   size: isMobile ? 0.4 : 0.5,
   vertexColors: true,
-  sizeAttenuation: true
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 1
 });
 var colorArr = new Float32Array(COUNT * 3);
 var posArr   = new Float32Array(COUNT * 3);
@@ -416,6 +424,77 @@ ptGeo.setAttribute('position', posBuf);
 ptGeo.setAttribute('color', colorBuf);
 var mesh = new THREE.Points(ptGeo, mat);
 scene.add(mesh);
+
+// ── Web experiment — proximity lines ─────────────────────────────────────────
+var WEB_NEIGHBORS = 4;      // lines per particle
+var WEB_MAX_DIST  = 8.0;    // max connection distance in world units
+var isWeb = false;
+var webLineGeo = new THREE.BufferGeometry();
+var webLinePosArr = new Float32Array(COUNT * WEB_NEIGHBORS * 2 * 3); // start+end per line
+var webLineBuf = new THREE.BufferAttribute(webLinePosArr, 3);
+webLineBuf.setUsage(THREE.DynamicDrawUsage);
+webLineGeo.setAttribute('position', webLineBuf);
+var webLineMat = new THREE.LineBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.18, vertexColors: false });
+var webLineMesh = new THREE.LineSegments(webLineGeo, webLineMat);
+webLineMesh.visible = false;
+scene.add(webLineMesh);
+
+// ── Chrome / Glass experiment — surface mesh ───────────────────────────────────
+var isChrome = false;
+var isGlass  = false;
+var surfaceMesh = null; // THREE.Mesh, created on demand
+var surfaceOpacity = 0; // 0=invisible, 1=fully visible
+var pointsOpacity  = 1; // inverse of surface opacity during transition
+
+// Create a reusable envMap for reflections (simple procedural)
+var pmremGenerator = null; // init lazily
+
+function getEnvMap() {
+  if (!pmremGenerator && THREE.PMREMGenerator) {
+    pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+  }
+  // Simple room environment — warm light above, cool below
+  var envScene = new THREE.Scene();
+  envScene.background = new THREE.Color(0xffffff);
+  var light1 = new THREE.DirectionalLight(0xfff4e0, 3);
+  light1.position.set(1, 2, 1);
+  envScene.add(light1);
+  var light2 = new THREE.DirectionalLight(0xc0d8ff, 1.5);
+  light2.position.set(-1, -1, -1);
+  envScene.add(light2);
+  envScene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  if (pmremGenerator) return pmremGenerator.fromScene(envScene).texture;
+  return null;
+}
+
+function buildSurfaceMesh(matType) {
+  if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; }
+
+  // Build geometry from current particle positions (convex-hull-ish via simple sphere proxy for now)
+  // Use an IcosahedronGeometry sized to match current swarm — morphed via displacement
+  var geo = new THREE.IcosahedronGeometry(22, 4);
+
+  var mat;
+  if (matType === 'chrome') {
+    mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, metalness: 1.0, roughness: 0.05,
+      envMap: getEnvMap(), envMapIntensity: 2.0,
+      transparent: true, opacity: 0
+    });
+  } else {
+    // glass / water
+    mat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff, metalness: 0.0, roughness: 0.0,
+      transmission: 1.0, thickness: 2.0, ior: 1.45,
+      transparent: true, opacity: 0.15,
+      envMap: getEnvMap(), envMapIntensity: 1.5
+    });
+  }
+  surfaceMesh = new THREE.Mesh(geo, mat);
+  surfaceMesh.visible = false;
+  scene.add(surfaceMesh);
+}
 
 // ── Per-particle state ────────────────────────────────────────────────────────
 var positions    = new Array(COUNT);
@@ -1481,6 +1560,14 @@ function genTorusKnot() {
   return pts;
 }
 
+// ── Web / Chrome / Glass ─────────────────────────────────────────────────────
+function genWeb() {
+  // Torus knot as the default shape for web — shows connections beautifully
+  return genTorusKnot();
+}
+function genChrome() { return genTorusKnot(); }
+function genGlass()  { return genTorusKnot(); }
+
 // ── Ghost — white field, small dark shape drifting through ────────────────
 var ghostColors = null;
 
@@ -2239,6 +2326,16 @@ function activateProject(key) {
   isGhost      = (key === 'ghost');
   isHumanhood  = (key === 'humanhood');
   if (isHumanhood) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
+  isWeb    = (key === 'web');
+  isChrome = (key === 'chrome');
+  isGlass  = (key === 'glass');
+  webLineMesh.visible = isWeb;
+  webLineMat.color.set(isDarkMode ? 0x8899cc : 0x111111);
+  if (isChrome) buildSurfaceMesh('chrome');
+  if (isGlass)  buildSurfaceMesh('glass');
+  if (!isChrome && !isGlass && surfaceMesh) {
+    scene.remove(surfaceMesh); surfaceMesh = null; surfaceOpacity = 0;
+  }
   isSplash   = (key === 'splash');
   if (key === 'type') startTypeCycle(); else stopTypeCycle();
   isLED    = (key === 'led');
@@ -2280,6 +2377,9 @@ function activateProject(key) {
       case 'dna':       pts = genDNA();       break;
       case 'attractor': pts = genAttractor(); break;
       case 'globe':     pts = genGlobe();     break;
+      case 'web':       pts = genWeb();       break;
+      case 'chrome':    pts = genChrome();    break;
+      case 'glass':     pts = genGlass();     break;
       case 'ink':       pts = genInk();       break;
       case 'torus':     pts = genTorusKnot(); break;
       case 'hopf':      pts = genHopf();      break;
@@ -2501,7 +2601,7 @@ function animate() {
       var glow  = Math.max(0, 1 - dist / bandW);
       var base  = isDarkMode ? DARK_PART : LIGHT_PART;
       if (glow > 0.01) {
-        var scanColor = isDarkMode ? new THREE.Color(0.7, 0.85, 1.0) : new THREE.Color(0.5, 0.5, 0.5);
+        var scanColor = new THREE.Color(0.3, 0.6, 1.0); // vivid blue always
         colors[i].copy(base).lerp(scanColor, glow * 0.7);
       } else {
         colors[i].lerp(base, COLOR_LERP);
@@ -2517,6 +2617,43 @@ function animate() {
     colorArr[i*3]   = colors[i].r;
     colorArr[i*3+1] = colors[i].g;
     colorArr[i*3+2] = colors[i].b;
+  }
+
+  // Web: update proximity lines — use stride to limit to ~2k particles for performance
+  if (isWeb) {
+    var WEB_STRIDE = Math.max(1, Math.floor(COUNT / 2000));
+    var lineIdx = 0;
+    for (var wi = 0; wi < COUNT; wi += WEB_STRIDE) {
+      var px = posArr[wi*3], py = posArr[wi*3+1], pz = posArr[wi*3+2];
+      var found = 0;
+      for (var wj = 0; wj < COUNT && found < WEB_NEIGHBORS; wj += WEB_STRIDE) {
+        if (wi === wj) continue;
+        var dx = posArr[wj*3]-px, dy = posArr[wj*3+1]-py, dz = posArr[wj*3+2]-pz;
+        if (Math.sqrt(dx*dx+dy*dy+dz*dz) < WEB_MAX_DIST) {
+          if (lineIdx + 5 < webLinePosArr.length) {
+            webLinePosArr[lineIdx++] = px; webLinePosArr[lineIdx++] = py; webLinePosArr[lineIdx++] = pz;
+            webLinePosArr[lineIdx++] = posArr[wj*3]; webLinePosArr[lineIdx++] = posArr[wj*3+1]; webLinePosArr[lineIdx++] = posArr[wj*3+2];
+          }
+          found++;
+        }
+      }
+    }
+    webLineGeo.setDrawRange(0, lineIdx / 3);
+    webLineBuf.needsUpdate = true;
+  }
+
+  // Chrome/Glass: fade surface mesh in as particles converge, fade out on exit
+  if ((isChrome || isGlass) && surfaceMesh) {
+    surfaceOpacity = Math.min(1, surfaceOpacity + 0.008); // ~4s fade in
+    surfaceMesh.visible = true;
+    surfaceMesh.material.opacity = isChrome ? surfaceOpacity : Math.min(0.15, surfaceOpacity * 0.15);
+    mat.opacity = Math.max(0, 1 - surfaceOpacity * 0.9); // particles fade out
+    // Scale surface mesh to roughly match swarm size
+    var swarmR = WEB_MAX_DIST; // approx
+    surfaceMesh.scale.setScalar(1 + Math.sin(Date.now() * 0.0005) * 0.02); // subtle breathe
+  } else {
+    surfaceOpacity = 0;
+    mat.opacity = 1;
   }
 
   // Advance head scan plane
