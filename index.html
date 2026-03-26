@@ -2464,6 +2464,7 @@ function activateProject(key) {
   }
 
   currentProject = key;
+  if (key !== 'type') nudgingHome = false; // stop camera pull when leaving Type
   isRadar      = (key === 'radar');
   isWave       = (key === 'wave');
   isGhost      = (key === 'ghost');
