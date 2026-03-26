@@ -740,9 +740,16 @@ function loadStatueGLB(callback) {
 }
 
 // ── Head GLB — contour slice sampler ─────────────────────────────────────────
-var headPoints  = null;
-var headLoading = false;
-var headError   = false;
+var headPoints     = null;
+var headLoading    = false;
+var headError      = false;
+var headMinY       = -19; // approx chin
+var headMaxY       =  19; // approx crown
+var headScanY      = -19; // current scan plane Y
+var headScanDir    = 1;   // 1 = up, -1 = down
+var headScanSpeed  = 8;   // world units per second
+var headRevealDone = false;
+var isHumanhood    = false;
 
 function loadHeadGLB(callback) {
   if (headPoints) { if (callback) callback(); return; }
@@ -857,8 +864,22 @@ function loadHeadGLB(callback) {
       // Fill remainder
       while (result.length < COUNT) result.push(result[result.length % result.length]);
 
+      // Flip face toward camera (rotate 180° around Y — negate X and Z)
+      for (var i = 0; i < result.length; i++) {
+        result[i].x = -result[i].x;
+        result[i].z = -result[i].z;
+      }
+
+      // Record actual Y range for scan
+      headMinY = Infinity; headMaxY = -Infinity;
+      for (var i = 0; i < result.length; i++) {
+        if (result[i].y < headMinY) headMinY = result[i].y;
+        if (result[i].y > headMaxY) headMaxY = result[i].y;
+      }
+      headScanY = headMinY; // start scan at chin
+
       headPoints = result;
-      console.log('Head loaded:', triangles.length, 'tris,', allContourPts.length, 'slices,', result.length, 'pts');
+      console.log('Head loaded:', triangles.length, 'tris,', allContourPts.length, 'slices,', result.length, 'pts', 'Y:', headMinY.toFixed(1), '-', headMaxY.toFixed(1));
       headLoading = false;
       if (callback) callback();
       if (currentProject === 'humanhood') setTargets(headPoints, 'humanhood');
@@ -2217,9 +2238,11 @@ function activateProject(key) {
   }
 
   currentProject = key;
-  isRadar  = (key === 'radar');
-  isWave   = (key === 'wave');
-  isGhost    = (key === 'ghost');
+  isRadar      = (key === 'radar');
+  isWave       = (key === 'wave');
+  isGhost      = (key === 'ghost');
+  isHumanhood  = (key === 'humanhood');
+  if (isHumanhood) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
   isSplash   = (key === 'splash');
   if (key === 'type') startTypeCycle(); else stopTypeCycle();
   isLED    = (key === 'led');
@@ -2441,6 +2464,21 @@ function animate() {
       }
     }
 
+    // Humanhood: reveal + scan plane
+    if (isHumanhood && headPoints) {
+      var hp = headPoints[i];
+      if (!headRevealDone) {
+        // Reveal phase: particles below scan plane lerp to head, above stay at sphere placeholder
+        if (hp.y <= headScanY) {
+          tgt.x = hp.x; tgt.y = hp.y; tgt.z = hp.z;
+        }
+        // else tgt stays as sphere placeholder (set by setTargets initially)
+      } else {
+        // Continuous: always at head position
+        tgt.x = hp.x; tgt.y = hp.y; tgt.z = hp.z;
+      }
+    }
+
     pos.lerp(tgt, lerpSpeeds[i]);
 
     // LED / Photo: override color each frame
@@ -2459,6 +2497,20 @@ function animate() {
     } else if (isSphere360 && sphereLoaded && sphereColors && sphereColors[i]) {
       colors[i].lerp(sphereColors[i], 0.04);
       targetColors[i].copy(sphereColors[i]);
+    } else if (isHumanhood && headPoints) {
+      // Scan glow: brighten particles near the scan plane
+      var hp = headPoints[i];
+      var bandW = 2.5;
+      var dist  = Math.abs(hp.y - headScanY);
+      var glow  = Math.max(0, 1 - dist / bandW);
+      var base  = isDarkMode ? DARK_PART : LIGHT_PART;
+      if (glow > 0.01) {
+        var scanColor = isDarkMode ? new THREE.Color(0.7, 0.85, 1.0) : new THREE.Color(0.5, 0.5, 0.5);
+        colors[i].copy(base).lerp(scanColor, glow * 0.7);
+      } else {
+        colors[i].lerp(base, COLOR_LERP);
+      }
+      targetColors[i].copy(base);
     } else {
       colors[i].lerp(targetColors[i], COLOR_LERP);
     }
@@ -2469,6 +2521,19 @@ function animate() {
     colorArr[i*3]   = colors[i].r;
     colorArr[i*3+1] = colors[i].g;
     colorArr[i*3+2] = colors[i].b;
+  }
+
+  // Advance head scan plane
+  if (isHumanhood && headPoints) {
+    var dt = 1/60; // approximate frame delta
+    if (!headRevealDone) {
+      headScanY += headScanSpeed * dt;
+      if (headScanY >= headMaxY) { headRevealDone = true; headScanY = headMinY; headScanDir = 1; }
+    } else {
+      headScanY += headScanSpeed * headScanDir * dt;
+      if (headScanY > headMaxY) { headScanDir = -1; headScanY = headMaxY; }
+      if (headScanY < headMinY) { headScanDir =  1; headScanY = headMinY; }
+    }
   }
 
   posBuf.needsUpdate = true;
