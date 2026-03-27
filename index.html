@@ -272,6 +272,7 @@
 
 <!-- Experiments slide-up panel -->
 <div id="exp-panel">
+  <div class="exp-item" data-project="radar">311 Radar</div>
   <div class="exp-item" data-project="grid">Grid</div>
   <div class="exp-item" data-project="lattice">Lattice</div>
   <div class="exp-item" data-project="line">Line</div>
@@ -298,7 +299,6 @@
   <div class="project-item" data-project="humanhood">Humanhood</div>
   <div class="project-item" data-project="canon">Canon</div>
   <div class="project-item" data-project="soilsync">Soil Sync</div>
-  <div class="project-item" data-project="radar">311 Radar</div>
   <div class="project-item" data-project="datamap">datamap.nyc</div>
   <div class="project-item" id="exp-toggle">Experiments ↑</div>
 </div>
@@ -325,7 +325,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var EXPERIMENT_KEYS = ['grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','klein','chrome','ghost','splash','led','photo','video'];
+var EXPERIMENT_KEYS = ['radar','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','klein','chrome','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
