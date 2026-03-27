@@ -296,6 +296,7 @@
 <div id="exp-panel">
   <div class="exp-item" data-project="radar">311 Radar</div>
   <div class="exp-item" data-project="grid">Grid</div>
+  <div class="exp-item" data-project="surface">Surface</div>
   <div class="exp-item" data-project="lattice">Lattice</div>
   <div class="exp-item" data-project="line">Line</div>
   <div class="exp-item" data-project="spiral">Spiral</div>
@@ -348,7 +349,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var EXPERIMENT_KEYS = ['radar','grid','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','klein','chrome','ghost','splash','led','photo','video'];
+var EXPERIMENT_KEYS = ['radar','grid','surface','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','klein','chrome','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
@@ -381,6 +382,7 @@ var SHAPE_CONFIG = {
   soilsync: { rotate: 0.25 },
   torus:    { rotate: 0.4 },
   canon:    { rotate: 0.3 },
+  surface:  { rotate: 0.0 },
   klein:    { rotate: 0.35 },
   chrome:   { rotate: 0.3 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
@@ -459,9 +461,19 @@ webLineMesh.visible = false;
 scene.add(webLineMesh);
 
 // ── Chrome / Glass experiment — surface mesh ───────────────────────────────────
-var isChrome = false;
+var isChrome  = false;
+var isSurface = false;
 var isGlass  = false;
-var surfaceMesh = null; // THREE.Mesh, created on demand
+var surfaceMesh  = null; // THREE.Mesh, created on demand
+
+// ── Surface — animated line-grid mesh ────────────────────────────────────────
+var fieldMesh    = null;
+var fieldGeo     = null;
+var fieldBase    = null; // Float32Array — original flat vertex positions
+var FIELD_SEG    = 80;   // segments per side — 80×80 grid
+var FIELD_SIZE   = 60;   // world units
+var fieldMouse   = new THREE.Vector2(0, 0); // attractor in world XY
+var fieldHasMouse = false;
 var surfaceOpacity = 0; // 0=invisible, 1=fully visible
 var pointsOpacity  = 1; // inverse of surface opacity during transition
 
@@ -494,6 +506,55 @@ var chromeMorphTo     = 1;    // index of target shape
 var chromeMorphT      = 0;    // lerp progress 0→1
 var chromeMorphSpeed  = 0.004; // per frame (~4s per morph at 60fps)
 var chromeMorphHold   = 0;    // frames to hold at destination
+
+function buildFieldMesh() {
+  teardownFieldMesh();
+  // Build grid lines manually so positions update dynamically
+  var segs = FIELD_SEG;
+  var sz   = FIELD_SIZE;
+  var half = sz / 2;
+  var step = sz / segs;
+  var lineVerts = [];
+  // Horizontal lines
+  for (var row = 0; row <= segs; row++) {
+    var y = -half + row * step;
+    for (var col = 0; col < segs; col++) {
+      var x0 = -half + col * step;
+      var x1 = x0 + step;
+      lineVerts.push(x0, y, 0, x1, y, 0);
+    }
+  }
+  // Vertical lines
+  for (var col2 = 0; col2 <= segs; col2++) {
+    var x = -half + col2 * step;
+    for (var row2 = 0; row2 < segs; row2++) {
+      var y0 = -half + row2 * step;
+      var y1 = y0 + step;
+      lineVerts.push(x, y0, 0, x, y1, 0);
+    }
+  }
+  var arr = new Float32Array(lineVerts);
+  fieldBase = arr.slice(); // keep original flat positions
+  fieldGeo = new THREE.BufferGeometry();
+  fieldGeo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  var lineMat = new THREE.LineBasicMaterial({
+    color: isDarkMode ? 0xbbbbbb : 0x222222,
+    transparent: true, opacity: 0.5
+  });
+  fieldMesh = new THREE.LineSegments(fieldGeo, lineMat);
+  scene.add(fieldMesh);
+}
+
+function teardownFieldMesh() {
+  if (fieldMesh) {
+    scene.remove(fieldMesh);
+    fieldMesh.geometry.dispose();
+    fieldMesh.material.dispose();
+    fieldMesh = null;
+    fieldGeo  = null;
+    fieldBase = null;
+  }
+}
 
 function buildSurfaceMesh(matType) {
   if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; }
@@ -1388,7 +1449,21 @@ renderer.domElement.addEventListener('touchmove', function(e) {
   sphere360Lat = Math.max(-85, Math.min(85, sphere360Lat));
   sphere360LastX = e.touches[0].clientX; sphere360LastY = e.touches[0].clientY;
 }, { passive: false });
-window.addEventListener('touchend', function() { sphere360Dragging = false; });
+window.addEventListener('touchend', function() { sphere360Dragging = false; fieldHasMouse = false; });
+window.addEventListener('touchmove', function(e) {
+  if (!isSurface) return;
+  var touch = e.touches[0];
+  var rect = renderer.domElement.getBoundingClientRect();
+  var ndcX = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+  var ndcY = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+  var tv = new THREE.Vector3(ndcX, ndcY, 0.5);
+  tv.unproject(camera);
+  var tdir = tv.sub(camera.position).normalize();
+  var tdist = -camera.position.z / tdir.z;
+  var tworld = camera.position.clone().addScaledVector(tdir, tdist);
+  fieldMouse.set(tworld.x, tworld.y);
+  fieldHasMouse = true;
+}, { passive: true });
 
 
 
@@ -1407,6 +1482,7 @@ window.addEventListener('mousemove', function(e) {
   var dir = v.sub(camera.position).normalize();
   var dist = -camera.position.z / dir.z;
   mouse.copy(camera.position).addScaledVector(dir, dist);
+  if (isSurface) { fieldMouse.set(mouse.x, mouse.y); fieldHasMouse = true; }
 });
 
 // ── Hopf Fibration ────────────────────────────────────────────────────────────
@@ -2493,6 +2569,7 @@ function activateProject(key) {
   isGhost      = (key === 'ghost');
   isHumanhood  = (key === 'humanhood');
   isCanon      = (key === 'canon');
+  isSurface    = (key === 'surface');
   if (isHumanhood) {
     if (!headPoints) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
     else { headRevealDone = true; headScanY = headMinY; headScanDir = 1; }
@@ -2504,9 +2581,10 @@ function activateProject(key) {
     atmosTimer = 200 + Math.floor(Math.random() * 200); // staggered first assignment
   }
   isChrome = (key === 'chrome');
-  mesh.visible = !isChrome;
-  if (isChrome) { buildSurfaceMesh('chrome'); }
-  else { mesh.visible = true; if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; } mat.opacity = 1; }
+  mesh.visible = !isChrome && !isSurface;
+  if (isChrome) { buildSurfaceMesh('chrome'); teardownFieldMesh(); }
+  else if (isSurface) { buildFieldMesh(); if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; } mat.opacity = 0; }
+  else { mesh.visible = true; mat.opacity = 1; teardownFieldMesh(); if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; } }
   isSplash   = (key === 'splash');
   if (key === 'type') startTypeCycle(); else stopTypeCycle();
   isLED    = (key === 'led');
@@ -2552,6 +2630,7 @@ function activateProject(key) {
       case 'canon':     pts = genCanon();     break;
       case 'web':       pts = genWeb();       break;
       case 'chrome':    pts = genChrome();    break;
+      case 'surface':   pts = genGrid();      break; // particles hidden; field mesh takes over
       case 'glass':     pts = genGlass();     break;
       case 'ink':       pts = genInk();       break;
       case 'torus':     pts = genTorusKnot(); break;
@@ -2850,6 +2929,27 @@ function animate() {
   }
 
   // Chrome: standalone blob — no particles, just the mesh
+  // Surface: animate line-grid with ripple + pinch attractor
+  if (isSurface && fieldMesh && fieldGeo && fieldBase) {
+    var ft = clock.getElapsedTime();
+    var fpos = fieldGeo.attributes.position.array;
+    var flen = fpos.length / 3;
+    for (var vi = 0; vi < flen; vi++) {
+      var bx = fieldBase[vi * 3];
+      var by = fieldBase[vi * 3 + 1];
+      // Idle: two overlapping slow sine waves
+      var ripple = Math.sin(bx * 0.18 + ft * 0.6) * Math.cos(by * 0.18 + ft * 0.45) * 2.2
+                 + Math.sin(bx * 0.09 - ft * 0.35) * Math.sin(by * 0.12 + ft * 0.5) * 1.2;
+      // Pinch: Gaussian pull toward mouse attractor
+      var fdx = bx - fieldMouse.x;
+      var fdy = by - fieldMouse.y;
+      var fd2 = fdx*fdx + fdy*fdy;
+      var pinch = fieldHasMouse ? Math.exp(-fd2 * 0.004) * 7.0 : 0;
+      fpos[vi * 3 + 2] = ripple + pinch;
+    }
+    fieldGeo.attributes.position.needsUpdate = true;
+  }
+
   if (isChrome && surfaceMesh) {
     surfaceMesh.visible = true;
     surfaceMesh.material.opacity = 1;
