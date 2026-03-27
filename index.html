@@ -11,6 +11,28 @@
     canvas { display: block; }
 
     /* ── Unified pill bar (desktop + mobile) ── */
+    #logo {
+      position: fixed; top: 20px; left: 20px;
+      font-size: 9px; letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.4);
+      padding: 8px 14px;
+      background: rgba(244,242,238,0.72);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 40px;
+      border: 1px solid rgba(0,0,0,0.08);
+      cursor: pointer; z-index: 10;
+      opacity: 0; animation: fadeIn 2s ease 0.8s forwards;
+      user-select: none; -webkit-user-select: none;
+      transition: color 0.2s;
+    }
+    #logo:hover, #logo.active { color: rgba(0,0,0,0.85); }
+    body.dark #logo {
+      background: rgba(20,20,20,0.72);
+      border-color: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.4);
+    }
+    body.dark #logo:hover, body.dark #logo.active { color: rgba(255,255,255,0.9); }
     #ui {
       position: fixed; bottom: 24px; left: 50%;
       transform: translateX(-50%);
@@ -294,8 +316,9 @@
 
 <button id="dark-toggle" title="Toggle dark mode">☽</button>
 
+<div id="logo" title="Reservoir">Reservoir</div>
+
 <div id="ui">
-  <div class="project-item active" data-project="type">Reservoir</div>
   <div class="project-item" data-project="humanhood">Humanhood</div>
   <div class="project-item" data-project="canon">Canon</div>
   <div class="project-item" data-project="soilsync">Soil Sync</div>
@@ -2551,6 +2574,8 @@ function activateProject(key) {
   document.querySelectorAll('.project-item').forEach(function(el) {
     el.classList.toggle('active', el.dataset.project === key);
   });
+  // Logo active state
+  document.getElementById('logo').classList.toggle('active', key === 'type');
 }
 
 // Preload statue as soon as scripts are ready (background, non-blocking)
@@ -2558,6 +2583,12 @@ setTimeout(function() { loadStatueGLB(); }, 1500);
 // Head loads on demand only (no preload — ensures callback runs while isHumanhood=true)
 
 // ── Dark mode toggle ─────────────────────────────────────────────────────────
+// Logo — hover (desktop) and tap (mobile) both return to Reservoir
+var logoEl = document.getElementById('logo');
+function activateLogo() { activateProject('type'); }
+logoEl.addEventListener('click', activateLogo);
+logoEl.addEventListener('mouseenter', function() { if (!isMobile) activateLogo(); });
+
 document.getElementById('dark-toggle').addEventListener('click', function() {
   isDarkMode = !isDarkMode;
   document.body.classList.toggle('dark', isDarkMode);
