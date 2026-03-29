@@ -2759,7 +2759,7 @@ function activateProject(key) {
   readProg.classList.toggle('visible', key === 'read');
   if (key === 'read') {
     readWordIdx = 0; readTimer = 0; readFormCount = 0;
-    mesh.visible = false;
+    mesh.visible = true;
     buildReadLayout();
     var cloud = [];
     for (var ci = 0; ci < COUNT; ci++) {
@@ -2768,7 +2768,7 @@ function activateProject(key) {
     setTargets(cloud, 'read');
     randomizeLerpSpeeds(0.03, 0.055);
   } else if (key === 'write') {
-    mesh.visible = false;
+    mesh.visible = true;
     var cloud2 = [];
     for (var ci2 = 0; ci2 < COUNT; ci2++) {
       cloud2.push({ x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*50, z: (Math.random()-0.5)*30 });
@@ -2863,7 +2863,7 @@ document.getElementById('write-input').addEventListener('input', function() {
   clearTimeout(writeDebounce);
   writeDebounce = setTimeout(function() {
     if (isWrite && val.trim()) {
-      mesh.visible = false;
+      mesh.visible = true;
       applyWriteText(val);
     }
   }, 280);
