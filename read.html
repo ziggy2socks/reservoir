@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Read — Reservoir</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #f4f2ee; }
+    canvas { display: block; position: fixed; top: 0; left: 0; }
+    #scroll-track {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      overflow-y: scroll; z-index: 2; background: transparent;
+    }
+    #scroll-content {
+      /* height set by JS to match total text height + viewport */
+      width: 100%;
+    }
+    #back {
+      position: fixed; top: 20px; left: 20px; z-index: 10;
+      font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(0,0,0,0.35); cursor: pointer;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      text-decoration: none;
+      padding: 8px 14px;
+      background: rgba(244,242,238,0.72);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 40px;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+    #back:hover { color: rgba(0,0,0,0.8); }
+  </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="scroll-track"><div id="scroll-content"></div></div>
+<a id="back" href="/">Reservoir</a>
+
+<script type="module">
+import { prepareWithSegments, layoutWithLines } from 'https://cdn.jsdelivr.net/npm/@chenglou/pretext@0.2.2/+esm';
+
+// ── Essay text ────────────────────────────────────────────────────────────────
+const TEXT = `Imagine yourself in Central Park one million years ago. You would be standing on a vast ice sheet, a 4,000-mile glacial wall, as much as 2,000 feet thick. Alone on the vast glacier, you would not sense its slow crushing, scraping, ripping movement as it advanced south, leaving great masses of rock debris in its wake. Under the frozen depths, where the carousel now stands, you would not notice the effect on the bedrock as the glacier dragged itself along.
+
+Back in the 1850s, Frederick Law Olmsted and Calvert Vaux considered that glacial aftermath along its geological profiles. The building of New York City had interrupted the ponderous results of those Pleistocene ice sheets. Olmsted and Vaux studied the site topography for their proposed park called Greensward. This faded photograph reveals that Manhattan Island once had a desert on it — a manmade wasteland. Treeless and barren, it evokes the observations of the valley of ashes in F. Scott Fitzgerald's The Great Gatsby, where ashes grow like wheat into ridges and hills and grotesque gardens.
+
+Olmsted, the sylvan artist, yearned for the color green as Nature's universal robe and the Sharawadgi parks of England. He wanted the asymmetrical landscapes of Uvedale Price in the middle of urban flux. Into Brooklyn he would bring the luxuriance of tropical scenery — gay with flowers and intricate with vines and creepers, ferns, rushes, and broad leaved plants. This is like having an orchid garden in a steel mill, or a factory where palm trees would be lit by the fire of blast furnaces.
+
+The origins of Olmsted's view of landscape are to be found in 18th-century England, particularly in the theories of Uvedale Price and William Gilpin. Price extended Edmund Burke's Inquiry into the Origin of Our Ideas of the Sublime and the Beautiful to a point that tried to free landscaping from the picture gardens of Italy into a more physical sense of the temporal landscape. A tree, for example, struck by lightning was something other than merely beautiful or sublime — it was picturesque.
+
+Inherent in the theories of Price and Gilpin, and in Olmsted's response to them, are the beginnings of a dialectic of the landscape. A park can no longer be seen as a thing-in-itself, but rather as a process of ongoing relationships existing in a physical region — the park becomes a thing-for-us. Olmsted's parks exist before they are finished, which means in fact they are never finished; they remain carriers of the unexpected and of contradiction on all levels of human activity, be it social, political, or natural.`;
+
+// ── Canvas setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W, H, dpr;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W   = window.innerWidth;
+  H   = window.innerHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+  init();
+}
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+const FONT_SIZE   = 17;
+const LINE_HEIGHT = 28;
+const FONT_STR    = `${FONT_SIZE}px Georgia, serif`;
+const COL_WIDTH   = Math.min(480, window.innerWidth - 80);
+const PAD_TOP     = 80;  // top padding before text starts
+const PAD_BOTTOM  = window.innerHeight * 1.2; // extra scroll room at bottom
+
+// Each char: { ch, tx, ty, dx, dy, phase, freq }
+// tx/ty = true layout position (relative to content top)
+// dx/dy = current drift offset
+let chars = [];
+let totalTextHeight = 0;
+
+async function init() {
+  chars = [];
+  const colX = (W - COL_WIDTH) / 2;
+
+  // Split into paragraphs, lay out each
+  const paragraphs = TEXT.split('\n\n');
+  let yOffset = PAD_TOP;
+
+  for (let pi = 0; pi < paragraphs.length; pi++) {
+    const para = paragraphs[pi].replace(/\n/g, ' ').trim();
+    if (!para) continue;
+
+    const prepared = prepareWithSegments(para, FONT_STR);
+    const { lines } = layoutWithLines(prepared, COL_WIDTH, LINE_HEIGHT);
+
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      const lineText = line.text;
+      let xCursor = colX;
+
+      // Measure each character individually for x position
+      for (let ci = 0; ci < lineText.length; ci++) {
+        const ch = lineText[ci];
+        ctx.font = FONT_STR;
+        const chW = ctx.measureText(ch).width;
+
+        if (ch !== ' ') {
+          chars.push({
+            ch,
+            tx: xCursor,
+            ty: yOffset + li * LINE_HEIGHT,
+            // Drift: random offset, slow oscillation
+            dx: (Math.random() - 0.5) * W * 0.6,
+            dy: (Math.random() - 0.5) * H * 0.8,
+            phase: Math.random() * Math.PI * 2,
+            freq:  0.0003 + Math.random() * 0.0004,
+            // Current animated position (starts at drift)
+            cx: 0, cy: 0,
+            // Opacity in dissolved state
+            driftAlpha: 0.15 + Math.random() * 0.2
+          });
+        }
+        xCursor += chW;
+      }
+    }
+
+    yOffset += lines.length * LINE_HEIGHT + LINE_HEIGHT * 1.2; // paragraph gap
+  }
+
+  totalTextHeight = yOffset + PAD_BOTTOM;
+  document.getElementById('scroll-content').style.height = totalTextHeight + 'px';
+
+  // Init current positions to drift positions
+  const now = performance.now();
+  for (const c of chars) {
+    c.cx = c.tx + c.dx * Math.sin(c.phase + now * c.freq);
+    c.cy = c.ty + c.dy * Math.cos(c.phase + now * c.freq * 0.7);
+  }
+}
+
+// ── Scroll ────────────────────────────────────────────────────────────────────
+let scrollY = 0;
+document.getElementById('scroll-track').addEventListener('scroll', function() {
+  scrollY = this.scrollTop;
+}, { passive: true });
+
+// ── Render loop ───────────────────────────────────────────────────────────────
+// Assembly gradient: fully assembled in top ASSEMBLE_ZONE of screen,
+// fully dissolved in bottom DISSOLVE_ZONE.
+const ASSEMBLE_ZONE = 0.35; // top 35% of screen = fully legible
+const DISSOLVE_ZONE = 0.72; // below 72% = fully dissolved
+
+function getAssembly(charScreenY) {
+  const t = charScreenY / H;
+  if (t <= ASSEMBLE_ZONE) return 1;
+  if (t >= DISSOLVE_ZONE) return 0;
+  // Smooth cubic falloff
+  const u = (t - ASSEMBLE_ZONE) / (DISSOLVE_ZONE - ASSEMBLE_ZONE);
+  return 1 - (u * u * (3 - 2 * u));
+}
+
+function draw(now) {
+  requestAnimationFrame(draw);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  // Subtle background
+  ctx.fillStyle = '#f4f2ee';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.font = FONT_STR;
+  ctx.textBaseline = 'alphabetic';
+
+  for (const c of chars) {
+    // Screen Y = content Y - scroll
+    const screenY = c.ty - scrollY;
+    const screenX = c.tx;
+
+    // Skip if far off screen
+    if (screenY < -LINE_HEIGHT * 3 || screenY > H + LINE_HEIGHT * 3) continue;
+
+    const assembly = getAssembly(screenY);
+
+    // Drift position — slow Lissajous wander
+    const driftX = c.tx + c.dx * 0.4 * Math.sin(c.phase + now * c.freq);
+    const driftY = c.ty + c.dy * 0.35 * Math.cos(c.phase + now * c.freq * 0.7);
+
+    // Lerp current position toward target
+    const targetX = assembly > 0.5
+      ? screenX + (1 - assembly) * (driftX - c.tx) * 2
+      : driftX - scrollY * 0; // fully drifting — use absolute drift pos
+
+    // Blend: assembled = exact screen pos, dissolved = drifting
+    const cx = assembly * screenX + (1 - assembly) * (driftX - c.dx * 0.4 * Math.sin(c.phase) + (c.tx - c.tx)); // recalc
+    const cy = assembly * (screenY) + (1 - assembly) * (driftY - scrollY);
+
+    // Simpler: lerp between true screen position and drift-offset position
+    const drawX = assembly * screenX        + (1 - assembly) * (c.tx + c.dx * 0.45 * Math.sin(c.phase + now * c.freq));
+    const drawY = assembly * (c.ty - scrollY) + (1 - assembly) * (c.ty + c.dy * 0.4  * Math.cos(c.phase + now * c.freq * 0.7) - scrollY);
+
+    // Opacity: assembled = full, dissolved = faint
+    const alpha = assembly * 0.85 + (1 - assembly) * c.driftAlpha;
+
+    ctx.fillStyle = `rgba(20,18,14,${alpha.toFixed(3)})`;
+    ctx.fillText(c.ch, drawX, drawY);
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
