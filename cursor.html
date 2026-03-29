@@ -29,12 +29,27 @@
       font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
       transition: opacity 1s;
     }
+    #mode-toggle {
+      position: fixed; top: 20px; right: 20px; z-index: 10;
+      font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255,255,255,0.3); cursor: pointer;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 40px;
+      border: 1px solid rgba(255,255,255,0.08);
+      user-select: none;
+      transition: color 0.2s;
+    }
+    #mode-toggle:hover { color: rgba(255,255,255,0.8); }
   </style>
 </head>
 <body>
 
 <canvas id="c"></canvas>
 <a id="back" href="/">Reservoir</a>
+<div id="mode-toggle">Scroll</div>
 <div id="hint">move to read · shift+scroll to resize</div>
 
 <script type="module">
@@ -61,6 +76,20 @@ const LINE_HEIGHT = 28;
 const FONT_STR    = `${FONT_SIZE}px 'Helvetica Neue', Helvetica, Arial, sans-serif`;
 const PAD_TOP     = 60;
 const PAD_BOTTOM  = 400;
+
+// Mode: 'cursor' or 'scroll'
+let mode = 'cursor';
+const modeToggleEl = document.getElementById('mode-toggle');
+modeToggleEl.addEventListener('click', () => {
+  mode = mode === 'cursor' ? 'scroll' : 'cursor';
+  modeToggleEl.textContent = mode === 'cursor' ? 'Scroll' : 'Cursor';
+  hintEl.textContent = mode === 'cursor'
+    ? 'move to read · shift+scroll to resize'
+    : 'scroll to read';
+  hintEl.style.opacity = '1';
+  hintHidden = false;
+  setTimeout(() => { hintEl.style.opacity = '0'; }, 3000);
+});
 
 // Cursor / touch state
 let cx = -9999, cy = -9999; // screen coords
@@ -148,7 +177,7 @@ async function buildLayout() {
 // ── Input ─────────────────────────────────────────────────────────────────────
 window.addEventListener('mousemove', e => {
   cx = e.clientX; cy = e.clientY;
-  if (!hintHidden) { hintEl.style.opacity = '0'; hintHidden = true; }
+  if (!hintHidden && mode === 'cursor') { hintEl.style.opacity = '0'; hintHidden = true; }
 });
 
 // Touch — finger position = reading window
@@ -184,14 +213,27 @@ window.addEventListener('wheel', e => {
 }, { passive: false });
 
 // ── Render ────────────────────────────────────────────────────────────────────
+const SCROLL_BAND_HALF  = 48;  // px — fully assembled within this many px of screen mid
+const SCROLL_FADE_HALF  = 140; // px — fully dissolved beyond this
+
 function getAssembly(charScreenY, charScreenX) {
-  const dx = charScreenX - cx;
-  const dy = charScreenY - cy;
-  const dist = Math.sqrt(dx*dx + dy*dy);
-  if (dist <= R_INNER) return 1;
-  if (dist >= R_OUTER) return 0;
-  const u = (dist - R_INNER) / (R_OUTER - R_INNER);
-  return 1 - (u * u * (3 - 2 * u)); // smooth cubic
+  if (mode === 'cursor') {
+    const dx = charScreenX - cx;
+    const dy = charScreenY - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist <= R_INNER) return 1;
+    if (dist >= R_OUTER) return 0;
+    const u = (dist - R_INNER) / (R_OUTER - R_INNER);
+    return 1 - (u * u * (3 - 2 * u));
+  } else {
+    // Scroll mode — horizontal band around vertical screen midpoint
+    const mid  = H / 2;
+    const dist = Math.abs(charScreenY - mid);
+    if (dist <= SCROLL_BAND_HALF)  return 1;
+    if (dist >= SCROLL_FADE_HALF)  return 0;
+    const u = (dist - SCROLL_BAND_HALF) / (SCROLL_FADE_HALF - SCROLL_BAND_HALF);
+    return 1 - (u * u * (3 - 2 * u));
+  }
 }
 
 function draw(now) {
@@ -238,13 +280,8 @@ function draw(now) {
     ctx.fillText(c.ch, drawX, drawY);
   }
 
-  // Draw reading window circle — subtle, just a faint ring
-  if (cx > 0 && cy > 0) {
-    const grad = ctx.createRadialGradient(cx, cy, R_INNER * 0.7, cx, cy, R_OUTER);
-    grad.addColorStop(0,   'rgba(244,242,238,0)');
-    grad.addColorStop(0.5, 'rgba(244,242,238,0)');
-    grad.addColorStop(1,   'rgba(244,242,238,0)');
-    // Just a very faint cursor dot so user knows where the window is
+  // Cursor dot — only in cursor mode
+  if (mode === 'cursor' && cx > 0 && cy > 0) {
     ctx.beginPath();
     ctx.arc(cx, cy, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
