@@ -164,7 +164,7 @@
     }
     #write-input-wrap.visible { display: block; }
     #write-input {
-      font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+      font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase;
       background: rgba(244,242,238,0.82); border: 1px solid rgba(0,0,0,0.12);
       backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
       border-radius: 40px; padding: 8px 18px;
@@ -1269,18 +1269,20 @@ function buildReadLayout() {
   var ptsPerWord = Math.floor(COUNT / READ_WORDS.length);
   ptsPerWord = Math.max(8, Math.min(ptsPerWord, 60));
 
+  var COLS    = 5;
+  var CELL_W  = 16; // world units per word cell
+  var CELL_H  = 10;
+  var startX  = -((COLS - 1) * CELL_W) / 2; // center the grid
   for (var wi = 0; wi < READ_WORDS.length; wi++) {
     var sampled = sampleWordParticles(READ_WORDS[wi], font, ptsPerWord);
     var startIdx = readAllPts.length;
-    // Spread words in 3D — arrange in a loose flowing cloud
-    // Each word gets a position offset in world space
-    var col   = wi % 6;
-    var row   = Math.floor(wi / 6);
-    var wx    = (col - 2.5) * 22;
-    var wy    = -(row * 14) + 30;
-    var wz    = (Math.random() - 0.5) * 8;
-    var scaleX = 22 / sampled.w;
-    var scaleY = 14 / sampled.h;
+    var col   = wi % COLS;
+    var row   = Math.floor(wi / COLS);
+    var wx    = startX + col * CELL_W;
+    var wy    = 18 - row * CELL_H;
+    var wz    = (Math.random() - 0.5) * 4;
+    var scaleX = (CELL_W * 0.85) / sampled.w;
+    var scaleY = (CELL_H * 0.75) / sampled.h;
     for (var pi = 0; pi < sampled.pts.length; pi++) {
       var p = sampled.pts[pi];
       readAllPts.push({
@@ -1300,17 +1302,21 @@ function applyWriteText(text) {
   var words = text.trim().split(/\s+/);
   var font  = 'Helvetica Neue, Helvetica, Arial, sans-serif';
   var allPts = [];
-  var cols = Math.min(words.length, 4);
+  var cols = Math.min(words.length, 3);
+  var WCW  = 24; // word cell width
+  var WCH  = 12;
+  var wStartX = -((cols - 1) * WCW) / 2;
+  var totalRows = Math.ceil(words.length / cols);
   for (var wi = 0; wi < words.length; wi++) {
     var ptsPerWord = Math.floor(COUNT / Math.max(words.length, 1));
     ptsPerWord = Math.max(10, Math.min(ptsPerWord, 120));
     var sampled = sampleWordParticles(words[wi], font, ptsPerWord);
     var col = wi % cols;
     var row = Math.floor(wi / cols);
-    var wx  = (col - (cols - 1) / 2) * 28;
-    var wy  = -(row * 16) + (Math.floor(words.length / cols)) * 8;
-    var scaleX = 26 / sampled.w;
-    var scaleY = 14 / sampled.h;
+    var wx  = wStartX + col * WCW;
+    var wy  = ((totalRows - 1) * WCH) / 2 - row * WCH;
+    var scaleX = (WCW * 0.85) / sampled.w;
+    var scaleY = (WCH * 0.75) / sampled.h;
     for (var pi = 0; pi < sampled.pts.length; pi++) {
       var p = sampled.pts[pi];
       allPts.push({
