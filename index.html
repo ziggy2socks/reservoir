@@ -1262,7 +1262,6 @@ function sampleWordParticles(word, font, maxPts) {
 
 // Build full layout of all words, compute world-space targets for each
 function buildReadLayout() {
-  if (!pretextReady) return;
   READ_WORDS = OLMSTED_TEXT.split(/\s+/).filter(function(w) { return w.length > 0; });
   readAllPts  = [];
   readWordMap = [];
@@ -2761,31 +2760,25 @@ function activateProject(key) {
   if (key === 'read') {
     readWordIdx = 0; readTimer = 0; readFormCount = 0;
     mesh.visible = false;
-    loadPretext(function() {
-      buildReadLayout();
-      // Scatter all particles in a loose cloud to start
-      var cloud = [];
-      for (var ci = 0; ci < COUNT; ci++) {
-        cloud.push({ x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*50, z: (Math.random()-0.5)*30 });
-      }
-      setTargets(cloud, 'read');
-      randomizeLerpSpeeds(0.03, 0.055);
-    });
-  }
-  if (key === 'write') {
+    buildReadLayout();
+    var cloud = [];
+    for (var ci = 0; ci < COUNT; ci++) {
+      cloud.push({ x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*50, z: (Math.random()-0.5)*30 });
+    }
+    setTargets(cloud, 'read');
+    randomizeLerpSpeeds(0.03, 0.055);
+  } else if (key === 'write') {
     mesh.visible = false;
-    loadPretext(function() {
-      // Start with a scattered cloud
-      var cloud = [];
-      for (var ci = 0; ci < COUNT; ci++) {
-        cloud.push({ x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*50, z: (Math.random()-0.5)*30 });
-      }
-      setTargets(cloud, 'write');
-      randomizeLerpSpeeds(0.04, 0.07);
-      document.getElementById('write-input').focus();
-    });
+    var cloud2 = [];
+    for (var ci2 = 0; ci2 < COUNT; ci2++) {
+      cloud2.push({ x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*50, z: (Math.random()-0.5)*30 });
+    }
+    setTargets(cloud2, 'write');
+    randomizeLerpSpeeds(0.04, 0.07);
+    document.getElementById('write-input').focus();
+  } else {
+    mesh.visible = !isChrome && !isSurface;
   }
-  if (key !== 'read' && key !== 'write') mesh.visible = !isChrome && !isSurface;
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
@@ -2869,7 +2862,10 @@ document.getElementById('write-input').addEventListener('input', function() {
   var val = this.value;
   clearTimeout(writeDebounce);
   writeDebounce = setTimeout(function() {
-    if (isWrite && val.trim()) applyWriteText(val);
+    if (isWrite && val.trim()) {
+      mesh.visible = false;
+      applyWriteText(val);
+    }
   }, 280);
 });
 
