@@ -157,6 +157,32 @@
       font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
       color: rgba(0,0,0,0.25); pointer-events: none;
     }
+    #write-input-wrap {
+      display: none; position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+    }
+    #write-input-wrap.visible { display: block; }
+    #write-input {
+      font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+      background: rgba(244,242,238,0.82); border: 1px solid rgba(0,0,0,0.12);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 40px; padding: 8px 18px;
+      outline: none; color: rgba(0,0,0,0.7); width: 260px; text-align: center;
+      font-family: inherit;
+    }
+    body.dark #write-input {
+      background: rgba(20,20,20,0.82); border-color: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.7);
+    }
+    #read-progress {
+      display: none; position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(0,0,0,0.2); pointer-events: none;
+    }
+    #read-progress.visible { display: block; }
+    body.dark #read-progress { color: rgba(255,255,255,0.2); }
     #err {
       display: none; position: fixed; top: 20px; left: 50%;
       transform: translateX(-50%);
@@ -247,6 +273,8 @@
 
 <div id="err"></div>
 <div id="loading-hint">Loading…</div>
+<div id="write-input-wrap"><input id="write-input" type="text" placeholder="type anything…" autocomplete="off" spellcheck="false" /></div>
+<div id="read-progress"></div>
 <div id="debug-hint" style="display:none">D = debug</div>
 <div id="debug">
   <div id="debug-h"></div>
@@ -297,6 +325,8 @@
   <div class="exp-item" data-project="radar">311 Radar</div>
   <div class="exp-item" data-project="grid">Grid</div>
   <div class="exp-item" data-project="surface">Surface</div>
+  <div class="exp-item" data-project="read">Read</div>
+  <div class="exp-item" data-project="write">Write</div>
   <div class="exp-item" data-project="lattice">Lattice</div>
   <div class="exp-item" data-project="line">Line</div>
   <div class="exp-item" data-project="spiral">Spiral</div>
@@ -349,7 +379,7 @@ window.onerror = function(msg, src, line, col, err) {
 (function() {
 
 var isMobile = /Mobi|Android|iPad|iPhone/i.test(navigator.userAgent) || window.innerWidth < 640;
-var EXPERIMENT_KEYS = ['radar','grid','surface','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','klein','chrome','ghost','splash','led','photo','video'];
+var EXPERIMENT_KEYS = ['radar','grid','surface','read','write','lattice','line','spiral','wave','ring','dna','attractor','ink','torus','klein','chrome','ghost','splash','led','photo','video'];
 var COUNT = isMobile ? 12960 : 32400; // desktop=240×135, mobile=240×54 (doubled, smaller dots)
 var COLOR_LERP = 0.025;
 
@@ -383,6 +413,8 @@ var SHAPE_CONFIG = {
   torus:    { rotate: 0.4 },
   canon:    { rotate: 0.3 },
   surface:  { rotate: 0.0 },
+  read:     { rotate: 0.0 },
+  write:    { rotate: 0.0 },
   klein:    { rotate: 0.35 },
   chrome:   { rotate: 0.3 },
   ghost:    { rotate: 0.0, lockCamera: true, camPos: null },
@@ -1167,6 +1199,137 @@ function genDatamap() {
 // TRUE 2D GRID — flat xy plane, z=0, screen-filling at camera z=72
 // At z=72 with 60° FOV, visible height ≈ 2 * tan(30°) * 72 ≈ 83 units
 // We want dots to bleed slightly past screen edges
+// ── Read & Write experiments — Pretext-powered text particle layout ──────────
+var isRead  = false;
+var isWrite = false;
+var pretextReady = false;
+var pretextLib   = null; // { prepare, layoutWithLines } from @chenglou/pretext
+
+// Olmsted essay — body text only, no pull quotes
+var OLMSTED_TEXT = "Imagine yourself in Central Park one million years ago. You would be standing on a vast ice sheet, a 4,000-mile glacial wall, as much as 2,000 feet thick. Alone on the vast glacier, you would not sense its slow crushing, scraping, ripping movement as it advanced south, leaving great masses of rock debris in its wake. Back in the 1850s, Frederick Law Olmsted and Calvert Vaux considered that glacial aftermath along its geological profiles. The building of New York City had interrupted the ponderous results of those Pleistocene ice sheets. Olmsted yearned for the color green as Nature's universal robe and the Sharawadgi parks of England. He wanted the asymmetrical landscapes of Uvedale Price in the middle of urban flux. Into Brooklyn he would bring the luxuriance of tropical scenery — gay with flowers and intricate with vines and creepers, ferns, rushes, and broad leaved plants. Inherent in the theories of Price and Gilpin, and in Olmsted's response to them, are the beginnings of a dialectic of the landscape. A park can no longer be seen as a thing-in-itself, but rather as a process of ongoing relationships existing in a physical region — the park becomes a thing-for-us. Olmsted's parks exist before they are finished, which means in fact they are never finished; they remain carriers of the unexpected and of contradiction on all levels of human activity, be it social, political, or natural.";
+
+var READ_WORDS    = [];   // split word array
+var readWordIdx   = 0;    // current "cursor" word index
+var readTimer     = 0;    // frames until next word
+var READ_PACE     = 55;   // frames per word (~0.9s at 60fps)
+var readAllPts    = [];   // flat array of all formed word particle positions
+var readWordMap   = [];   // [{start, end}] index ranges per word in readAllPts
+var readFormCount = 0;    // how many words are fully formed (particles locked)
+
+// Offscreen canvas for sampling glyph pixels
+var ptxCanvas = document.createElement('canvas');
+var ptxCtx    = ptxCanvas.getContext('2d');
+
+function loadPretext(cb) {
+  if (pretextReady) { cb(); return; }
+  import('https://cdn.jsdelivr.net/npm/@chenglou/pretext@0.2.2/+esm').then(function(mod) {
+    pretextLib  = mod;
+    pretextReady = true;
+    cb();
+  }).catch(function(e) { console.warn('Pretext load failed', e); });
+}
+
+// Sample a word string into {x,y,z} particle positions using canvas rasterization
+function sampleWordParticles(word, font, maxPts) {
+  var fontSize = isMobile ? 52 : 72;
+  var fstr = fontSize + 'px ' + font;
+  ptxCtx.font = fstr;
+  var tw = Math.ceil(ptxCtx.measureText(word).width) + 20;
+  var th = fontSize * 1.4;
+  ptxCanvas.width  = tw;
+  ptxCanvas.height = th;
+  ptxCtx.clearRect(0, 0, tw, th);
+  ptxCtx.fillStyle = '#fff';
+  ptxCtx.font = fstr;
+  ptxCtx.textBaseline = 'middle';
+  ptxCtx.fillText(word, 10, th / 2);
+  var data = ptxCtx.getImageData(0, 0, tw, th).data;
+  var candidates = [];
+  for (var y = 0; y < th; y++) {
+    for (var x = 0; x < tw; x++) {
+      var a = data[(y * tw + x) * 4 + 3];
+      if (a > 60) candidates.push({ x: x, y: y });
+    }
+  }
+  // Subsample to maxPts
+  var step = Math.max(1, Math.floor(candidates.length / maxPts));
+  var result = [];
+  for (var i = 0; i < candidates.length; i += step) {
+    result.push(candidates[i]);
+  }
+  return { pts: result, w: tw, h: th };
+}
+
+// Build full layout of all words, compute world-space targets for each
+function buildReadLayout() {
+  if (!pretextReady) return;
+  READ_WORDS = OLMSTED_TEXT.split(/\s+/).filter(function(w) { return w.length > 0; });
+  readAllPts  = [];
+  readWordMap = [];
+  var font    = 'Helvetica Neue, Helvetica, Arial, sans-serif';
+  var ptsPerWord = Math.floor(COUNT / READ_WORDS.length);
+  ptsPerWord = Math.max(8, Math.min(ptsPerWord, 60));
+
+  for (var wi = 0; wi < READ_WORDS.length; wi++) {
+    var sampled = sampleWordParticles(READ_WORDS[wi], font, ptsPerWord);
+    var startIdx = readAllPts.length;
+    // Spread words in 3D — arrange in a loose flowing cloud
+    // Each word gets a position offset in world space
+    var col   = wi % 6;
+    var row   = Math.floor(wi / 6);
+    var wx    = (col - 2.5) * 22;
+    var wy    = -(row * 14) + 30;
+    var wz    = (Math.random() - 0.5) * 8;
+    var scaleX = 22 / sampled.w;
+    var scaleY = 14 / sampled.h;
+    for (var pi = 0; pi < sampled.pts.length; pi++) {
+      var p = sampled.pts[pi];
+      readAllPts.push({
+        x: wx + (p.x - sampled.w / 2) * scaleX,
+        y: wy + (sampled.h / 2 - p.y) * scaleY,
+        z: wz
+      });
+    }
+    readWordMap.push({ start: startIdx, end: readAllPts.length });
+  }
+}
+
+// Write experiment: rasterize the typed text and set targets
+var writePrepTimer = null;
+function applyWriteText(text) {
+  if (!text.trim()) return;
+  var words = text.trim().split(/\s+/);
+  var font  = 'Helvetica Neue, Helvetica, Arial, sans-serif';
+  var allPts = [];
+  var cols = Math.min(words.length, 4);
+  for (var wi = 0; wi < words.length; wi++) {
+    var ptsPerWord = Math.floor(COUNT / Math.max(words.length, 1));
+    ptsPerWord = Math.max(10, Math.min(ptsPerWord, 120));
+    var sampled = sampleWordParticles(words[wi], font, ptsPerWord);
+    var col = wi % cols;
+    var row = Math.floor(wi / cols);
+    var wx  = (col - (cols - 1) / 2) * 28;
+    var wy  = -(row * 16) + (Math.floor(words.length / cols)) * 8;
+    var scaleX = 26 / sampled.w;
+    var scaleY = 14 / sampled.h;
+    for (var pi = 0; pi < sampled.pts.length; pi++) {
+      var p = sampled.pts[pi];
+      allPts.push({
+        x: wx + (p.x - sampled.w / 2) * scaleX,
+        y: wy + (sampled.h / 2 - p.y) * scaleY,
+        z: (Math.random() - 0.5) * 4
+      });
+    }
+  }
+  // Pad/trim to COUNT
+  while (allPts.length < COUNT) allPts.push(allPts[allPts.length % Math.max(allPts.length, 1)]);
+  allPts.length = COUNT;
+  setTargets(allPts, 'write');
+}
+
+function genRead()  { return genGrid(); } // particles hidden; experiment drives targets
+function genWrite() { return genGrid(); }
+
 function genGrid() {
   var pts = [];
   // Cover full screen + bleed past edges at z=72
@@ -2570,6 +2733,8 @@ function activateProject(key) {
   isHumanhood  = (key === 'humanhood');
   isCanon      = (key === 'canon');
   isSurface    = (key === 'surface');
+  isRead       = (key === 'read');
+  isWrite      = (key === 'write');
   if (isHumanhood) {
     if (!headPoints) { headRevealDone = false; headScanY = headMinY; headScanDir = 1; }
     else { headRevealDone = true; headScanY = headMinY; headScanDir = 1; }
@@ -2587,6 +2752,40 @@ function activateProject(key) {
   else { mesh.visible = true; mat.opacity = 1; teardownFieldMesh(); if (surfaceMesh) { scene.remove(surfaceMesh); surfaceMesh.geometry.dispose(); surfaceMesh.material.dispose(); surfaceMesh = null; } }
   isSplash   = (key === 'splash');
   if (key === 'type') startTypeCycle(); else stopTypeCycle();
+
+  // Read experiment — load Pretext and build layout
+  var writeWrap = document.getElementById('write-input-wrap');
+  var readProg  = document.getElementById('read-progress');
+  writeWrap.classList.toggle('visible', key === 'write');
+  readProg.classList.toggle('visible', key === 'read');
+  if (key === 'read') {
+    readWordIdx = 0; readTimer = 0; readFormCount = 0;
+    mesh.visible = false;
+    loadPretext(function() {
+      buildReadLayout();
+      // Scatter all particles in a loose cloud to start
+      var cloud = [];
+      for (var ci = 0; ci < COUNT; ci++) {
+        cloud.push({ x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*50, z: (Math.random()-0.5)*30 });
+      }
+      setTargets(cloud, 'read');
+      randomizeLerpSpeeds(0.03, 0.055);
+    });
+  }
+  if (key === 'write') {
+    mesh.visible = false;
+    loadPretext(function() {
+      // Start with a scattered cloud
+      var cloud = [];
+      for (var ci = 0; ci < COUNT; ci++) {
+        cloud.push({ x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*50, z: (Math.random()-0.5)*30 });
+      }
+      setTargets(cloud, 'write');
+      randomizeLerpSpeeds(0.04, 0.07);
+      document.getElementById('write-input').focus();
+    });
+  }
+  if (key !== 'read' && key !== 'write') mesh.visible = !isChrome && !isSurface;
   isLED    = (key === 'led');
   isPhoto     = (key === 'photo');
   isVideoMode = (key === 'video');
@@ -2631,6 +2830,8 @@ function activateProject(key) {
       case 'web':       pts = genWeb();       break;
       case 'chrome':    pts = genChrome();    break;
       case 'surface':   pts = genGrid();      break; // particles hidden; field mesh takes over
+      case 'read':      pts = genRead();      break;
+      case 'write':     pts = genWrite();     break;
       case 'glass':     pts = genGlass();     break;
       case 'ink':       pts = genInk();       break;
       case 'torus':     pts = genTorusKnot(); break;
@@ -2662,6 +2863,16 @@ setTimeout(function() { loadStatueGLB(); }, 1500);
 // Head loads on demand only (no preload — ensures callback runs while isHumanhood=true)
 
 // ── Dark mode toggle ─────────────────────────────────────────────────────────
+// Write input — update particles as user types (debounced)
+var writeDebounce = null;
+document.getElementById('write-input').addEventListener('input', function() {
+  var val = this.value;
+  clearTimeout(writeDebounce);
+  writeDebounce = setTimeout(function() {
+    if (isWrite && val.trim()) applyWriteText(val);
+  }, 280);
+});
+
 // Logo — hover (desktop) and tap (mobile) both return to Reservoir
 var logoEl = document.getElementById('logo');
 function activateLogo() { activateProject('type'); }
@@ -2929,6 +3140,40 @@ function animate() {
   }
 
   // Chrome: standalone blob — no particles, just the mesh
+  // Read: advance word cursor, lock formed words, scatter future words
+  if (isRead && readWordMap.length > 0) {
+    readTimer--;
+    if (readTimer <= 0 && readWordIdx < readWordMap.length) {
+      readTimer = READ_PACE;
+      var wm = readWordMap[readWordIdx];
+      // Lock formed particles to their word positions
+      for (var ri = wm.start; ri < wm.end && ri < COUNT; ri++) {
+        targets[ri].x = readAllPts[ri].x;
+        targets[ri].y = readAllPts[ri].y;
+        targets[ri].z = readAllPts[ri].z;
+        lerpSpeeds[ri] = 0.06 + Math.random() * 0.04;
+      }
+      readWordIdx++;
+      readFormCount = wm.end;
+      var prog = document.getElementById('read-progress');
+      if (prog) prog.textContent = READ_WORDS.slice(0, readWordIdx).join(' ').slice(-60);
+      // Loop when done
+      if (readWordIdx >= readWordMap.length) {
+        setTimeout(function() {
+          if (isRead) {
+            readWordIdx = 0; readTimer = 0; readFormCount = 0;
+            var cloud2 = [];
+            for (var ci2 = 0; ci2 < COUNT; ci2++) {
+              cloud2.push({ x:(Math.random()-0.5)*80, y:(Math.random()-0.5)*50, z:(Math.random()-0.5)*30 });
+            }
+            setTargets(cloud2, 'read');
+            randomizeLerpSpeeds(0.02, 0.04);
+          }
+        }, 4000);
+      }
+    }
+  }
+
   // Surface: animate line-grid with ripple + pinch attractor
   if (isSurface && fieldMesh && fieldGeo && fieldBase) {
     var ft = clock.getElapsedTime();
