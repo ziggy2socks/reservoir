@@ -6,26 +6,26 @@
   <title>Cursor — Reservoir</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #f4f2ee; cursor: none; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; cursor: none; }
     canvas { display: block; position: fixed; top: 0; left: 0; }
     #back {
       position: fixed; top: 20px; left: 20px; z-index: 10;
       font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
-      color: rgba(0,0,0,0.35); cursor: pointer;
+      color: rgba(255,255,255,0.3); cursor: pointer;
       font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
       text-decoration: none;
       padding: 8px 14px;
-      background: rgba(244,242,238,0.72);
+      background: rgba(255,255,255,0.06);
       backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
       border-radius: 40px;
-      border: 1px solid rgba(0,0,0,0.08);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-    #back:hover { color: rgba(0,0,0,0.8); cursor: pointer; }
+    #back:hover { color: rgba(255,255,255,0.8); cursor: pointer; }
     #hint {
       position: fixed; bottom: 30px; left: 50%;
       transform: translateX(-50%);
       font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
-      color: rgba(0,0,0,0.2); pointer-events: none;
+      color: rgba(255,255,255,0.15); pointer-events: none;
       font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
       transition: opacity 1s;
     }
@@ -211,7 +211,7 @@ function draw(now) {
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#f4f2ee';
+  ctx.fillStyle = '#0a0a0a';
   ctx.fillRect(0, 0, W, H);
 
   ctx.font = FONT_STR;
@@ -234,7 +234,7 @@ function draw(now) {
 
     const alpha = assembly * 0.88 + (1 - assembly) * c.alpha;
 
-    ctx.fillStyle = `rgba(20,18,14,${alpha.toFixed(3)})`;
+    ctx.fillStyle = `rgba(255,252,245,${alpha.toFixed(3)})`;
     ctx.fillText(c.ch, drawX, drawY);
   }
 
@@ -247,7 +247,7 @@ function draw(now) {
     // Just a very faint cursor dot so user knows where the window is
     ctx.beginPath();
     ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.fill();
   }
 }
