@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/read", "destination": "/read.html" }
+    { "source": "/read",   "destination": "/read.html" },
+    { "source": "/cursor", "destination": "/cursor.html" }
   ]
 }

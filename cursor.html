@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cursor — Reservoir</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #f4f2ee; cursor: none; }
+    canvas { display: block; position: fixed; top: 0; left: 0; }
+    #back {
+      position: fixed; top: 20px; left: 20px; z-index: 10;
+      font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(0,0,0,0.35); cursor: pointer;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      text-decoration: none;
+      padding: 8px 14px;
+      background: rgba(244,242,238,0.72);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 40px;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+    #back:hover { color: rgba(0,0,0,0.8); cursor: pointer; }
+    #hint {
+      position: fixed; bottom: 30px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: rgba(0,0,0,0.2); pointer-events: none;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      transition: opacity 1s;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<a id="back" href="/">Reservoir</a>
+<div id="hint">move cursor to read</div>
+
+<script type="module">
+import { prepareWithSegments, layoutWithLines } from 'https://esm.sh/@chenglou/pretext@0.0.3';
+
+// ── Essay ─────────────────────────────────────────────────────────────────────
+const TEXT = `Imagine yourself in Central Park one million years ago. You would be standing on a vast ice sheet, a 4,000-mile glacial wall, as much as 2,000 feet thick. Alone on the vast glacier, you would not sense its slow crushing, scraping, ripping movement as it advanced south, leaving great masses of rock debris in its wake. Under the frozen depths, where the carousel now stands, you would not notice the effect on the bedrock as the glacier dragged itself along.
+
+Back in the 1850s, Frederick Law Olmsted and Calvert Vaux considered that glacial aftermath along its geological profiles. The building of New York City had interrupted the ponderous results of those Pleistocene ice sheets. Olmsted and Vaux studied the site topography for their proposed park called Greensward. This faded photograph reveals that Manhattan Island once had a desert on it — a manmade wasteland. Treeless and barren, it evokes the observations of the valley of ashes in F. Scott Fitzgerald's The Great Gatsby, where ashes grow like wheat into ridges and hills and grotesque gardens.
+
+Olmsted, the sylvan artist, yearned for the color green as Nature's universal robe and the Sharawadgi parks of England. He wanted the asymmetrical landscapes of Uvedale Price in the middle of urban flux. Into Brooklyn he would bring the luxuriance of tropical scenery — gay with flowers and intricate with vines and creepers, ferns, rushes, and broad leaved plants. This is like having an orchid garden in a steel mill, or a factory where palm trees would be lit by the fire of blast furnaces.
+
+The origins of Olmsted's view of landscape are to be found in 18th-century England, particularly in the theories of Uvedale Price and William Gilpin. Price extended Edmund Burke's Inquiry into the Origin of Our Ideas of the Sublime and the Beautiful to a point that tried to free landscaping from the picture gardens of Italy into a more physical sense of the temporal landscape. A tree, for example, struck by lightning was something other than merely beautiful or sublime — it was picturesque.
+
+Inherent in the theories of Price and Gilpin, and in Olmsted's response to them, are the beginnings of a dialectic of the landscape. A park can no longer be seen as a thing-in-itself, but rather as a process of ongoing relationships existing in a physical region — the park becomes a thing-for-us. Olmsted's parks exist before they are finished, which means in fact they are never finished; they remain carriers of the unexpected and of contradiction on all levels of human activity, be it social, political, or natural.`;
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W, H, dpr;
+
+const FONT_SIZE   = 17;
+const LINE_HEIGHT = 28;
+const FONT_STR    = `${FONT_SIZE}px Georgia, serif`;
+const PAD_TOP     = 60;
+const PAD_BOTTOM  = 400;
+
+// Cursor / touch state
+let cx = -9999, cy = -9999; // screen coords
+let isTouch = false;
+let scrollY = 0;
+let hintEl = document.getElementById('hint');
+let hintHidden = false;
+
+// Reading window
+const R_INNER = 90;  // fully assembled inside this radius
+const R_OUTER = 180; // fully dissolved outside this radius
+
+// Edge-scroll zones (fraction of screen height)
+const EDGE_ZONE   = 0.12;
+const SCROLL_SPEED = 4; // px per frame at full edge
+
+// All characters
+let chars = [];
+let totalH = 0;
+let colWidth, colX;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W   = window.innerWidth;
+  H   = window.innerHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  colWidth = Math.min(520, W - 80);
+  colX     = (W - colWidth) / 2;
+  buildLayout();
+}
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+async function buildLayout() {
+  chars = [];
+  let yOff = PAD_TOP;
+  const paragraphs = TEXT.split('\n\n');
+
+  for (const para of paragraphs) {
+    const text = para.replace(/\n/g, ' ').trim();
+    if (!text) continue;
+
+    const prepared = prepareWithSegments(text, FONT_STR);
+    const { lines } = layoutWithLines(prepared, colWidth, LINE_HEIGHT);
+
+    for (let li = 0; li < lines.length; li++) {
+      const lineText = lines[li].text;
+      let xCursor = colX;
+      ctx.font = FONT_STR;
+
+      for (let ci = 0; ci < lineText.length; ci++) {
+        const ch = lineText[ci];
+        const chW = ctx.measureText(ch).width;
+        if (ch !== ' ') {
+          // Drift: each letter wanders on its own Lissajous path
+          const driftR  = 80 + Math.random() * (Math.min(W, H) * 0.35);
+          const driftAng = Math.random() * Math.PI * 2;
+          chars.push({
+            ch,
+            // True layout position (content-space, not screen-space)
+            tx: xCursor,
+            ty: yOff + li * LINE_HEIGHT,
+            // Drift params
+            driftR,
+            driftAng,
+            driftX: Math.cos(driftAng) * driftR,
+            driftY: Math.sin(driftAng) * driftR * 0.6,
+            phase:  Math.random() * Math.PI * 2,
+            freqX:  0.00025 + Math.random() * 0.0003,
+            freqY:  0.0002  + Math.random() * 0.00025,
+            alpha:  0.1 + Math.random() * 0.15
+          });
+        }
+        xCursor += chW;
+      }
+    }
+    yOff += lines.length * LINE_HEIGHT + LINE_HEIGHT * 1.4;
+  }
+
+  totalH = yOff + PAD_BOTTOM;
+}
+
+// ── Input ─────────────────────────────────────────────────────────────────────
+window.addEventListener('mousemove', e => {
+  cx = e.clientX; cy = e.clientY;
+  if (!hintHidden) { hintEl.style.opacity = '0'; hintHidden = true; }
+});
+
+// Touch — finger position = reading window
+window.addEventListener('touchstart', e => {
+  isTouch = true;
+  cx = e.touches[0].clientX;
+  cy = e.touches[0].clientY;
+  if (!hintHidden) { hintEl.style.opacity = '0'; hintHidden = true; }
+}, { passive: true });
+
+window.addEventListener('touchmove', e => {
+  cx = e.touches[0].clientX;
+  cy = e.touches[0].clientY;
+}, { passive: true });
+
+window.addEventListener('touchend', () => {
+  // Keep last position — don't reset to -9999
+}, { passive: true });
+
+// Mouse wheel scroll
+window.addEventListener('wheel', e => {
+  scrollY = Math.max(0, Math.min(totalH - H, scrollY + e.deltaY));
+}, { passive: true });
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function getAssembly(charScreenY, charScreenX) {
+  const dx = charScreenX - cx;
+  const dy = charScreenY - cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist <= R_INNER) return 1;
+  if (dist >= R_OUTER) return 0;
+  const u = (dist - R_INNER) / (R_OUTER - R_INNER);
+  return 1 - (u * u * (3 - 2 * u)); // smooth cubic
+}
+
+function draw(now) {
+  requestAnimationFrame(draw);
+
+  // Edge-scroll on touch
+  if (isTouch && cy >= 0) {
+    const edgePx = H * EDGE_ZONE;
+    if (cy < edgePx) {
+      const strength = 1 - cy / edgePx;
+      scrollY = Math.max(0, scrollY - SCROLL_SPEED * strength * 2);
+    } else if (cy > H - edgePx) {
+      const strength = (cy - (H - edgePx)) / edgePx;
+      scrollY = Math.min(totalH - H, scrollY + SCROLL_SPEED * strength * 2);
+    }
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#f4f2ee';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.font = FONT_STR;
+  ctx.textBaseline = 'alphabetic';
+
+  for (const c of chars) {
+    const screenY = c.ty - scrollY;
+    const screenX = c.tx;
+
+    if (screenY < -LINE_HEIGHT * 4 || screenY > H + LINE_HEIGHT * 4) continue;
+
+    const assembly = getAssembly(screenY, screenX);
+
+    // Drift position — slow oscillation around scattered offset
+    const driftDrawX = c.tx + c.driftX * Math.sin(c.phase + now * c.freqX);
+    const driftDrawY = c.ty + c.driftY * Math.cos(c.phase + now * c.freqY) - scrollY;
+
+    const drawX = assembly * screenX        + (1 - assembly) * driftDrawX;
+    const drawY = assembly * (c.ty - scrollY) + (1 - assembly) * driftDrawY;
+
+    const alpha = assembly * 0.88 + (1 - assembly) * c.alpha;
+
+    ctx.fillStyle = `rgba(20,18,14,${alpha.toFixed(3)})`;
+    ctx.fillText(c.ch, drawX, drawY);
+  }
+
+  // Draw reading window circle — subtle, just a faint ring
+  if (cx > 0 && cy > 0) {
+    const grad = ctx.createRadialGradient(cx, cy, R_INNER * 0.7, cx, cy, R_OUTER);
+    grad.addColorStop(0,   'rgba(244,242,238,0)');
+    grad.addColorStop(0.5, 'rgba(244,242,238,0)');
+    grad.addColorStop(1,   'rgba(244,242,238,0)');
+    // Just a very faint cursor dot so user knows where the window is
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fill();
+  }
+}
+
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
