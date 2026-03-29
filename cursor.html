@@ -259,8 +259,11 @@ function draw(now) {
   ctx.font = FONT_STR;
   ctx.textBaseline = 'alphabetic';
 
+  // In scroll mode, shift all content down by H/2 so first line starts at the band
+  const scrollModeOffset = mode === 'scroll' ? H / 2 : 0;
+
   for (const c of chars) {
-    const screenY = c.ty - scrollY;
+    const screenY = c.ty - scrollY + scrollModeOffset;
     const screenX = c.tx;
 
     if (screenY < -LINE_HEIGHT * 4 || screenY > H + LINE_HEIGHT * 4) continue;
@@ -269,10 +272,10 @@ function draw(now) {
 
     // Drift position — slow oscillation around scattered offset
     const driftDrawX = c.tx + c.driftX * Math.sin(c.phase + now * c.freqX);
-    const driftDrawY = c.ty + c.driftY * Math.cos(c.phase + now * c.freqY) - scrollY;
+    const driftDrawY = c.ty + c.driftY * Math.cos(c.phase + now * c.freqY) - scrollY + scrollModeOffset;
 
-    const drawX = assembly * screenX        + (1 - assembly) * driftDrawX;
-    const drawY = assembly * (c.ty - scrollY) + (1 - assembly) * driftDrawY;
+    const drawX = assembly * screenX          + (1 - assembly) * driftDrawX;
+    const drawY = assembly * screenY          + (1 - assembly) * driftDrawY;
 
     const alpha = assembly * 0.88 + (1 - assembly) * c.alpha;
 
