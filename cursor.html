@@ -35,7 +35,7 @@
 
 <canvas id="c"></canvas>
 <a id="back" href="/">Reservoir</a>
-<div id="hint">move cursor to read</div>
+<div id="hint">move to read · shift+scroll to resize</div>
 
 <script type="module">
 import { prepareWithSegments, layoutWithLines } from 'https://esm.sh/@chenglou/pretext@0.0.3';
@@ -69,9 +69,9 @@ let scrollY = 0;
 let hintEl = document.getElementById('hint');
 let hintHidden = false;
 
-// Reading window
-const R_INNER = 90;  // fully assembled inside this radius
-const R_OUTER = 180; // fully dissolved outside this radius
+// Reading window — dynamic, scroll-to-zoom
+let R_INNER = 90;
+let R_OUTER = 180;
 
 // Edge-scroll zones (fraction of screen height)
 const EDGE_ZONE   = 0.12;
@@ -168,10 +168,20 @@ window.addEventListener('touchend', () => {
   // Keep last position — don't reset to -9999
 }, { passive: true });
 
-// Mouse wheel scroll
+// Mouse wheel:
+//   plain scroll    = scroll text
+//   Shift+scroll    = resize reading window
+//   Ctrl/pinch-zoom = resize reading window (trackpad)
 window.addEventListener('wheel', e => {
-  scrollY = Math.max(0, Math.min(totalH - H, scrollY + e.deltaY));
-}, { passive: true });
+  if (e.shiftKey || e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -14 : 14;
+    R_INNER = Math.max(30,  Math.min(320, R_INNER + delta));
+    R_OUTER = Math.max(60,  Math.min(640, R_OUTER + delta * 2));
+  } else {
+    scrollY = Math.max(0, Math.min(totalH - H, scrollY + e.deltaY));
+  }
+}, { passive: false });
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function getAssembly(charScreenY, charScreenX) {
